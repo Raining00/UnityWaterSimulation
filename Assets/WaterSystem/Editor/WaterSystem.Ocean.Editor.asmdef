@@ -1,0 +1,7 @@
+{
+  "name": "WaterSystem.Ocean.Editor",
+  "rootNamespace": "WaterSystem.Ocean.Editor",
+  "references": ["WaterSystem.Ocean", "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

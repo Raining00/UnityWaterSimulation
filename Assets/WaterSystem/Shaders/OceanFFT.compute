@@ -1,0 +1,140 @@
+#pragma kernel InitializeSpectrum
+#pragma kernel UpdateSpectrum
+#pragma kernel InverseFFT
+#pragma kernel BuildDisplacement
+#pragma kernel BuildNormals
+#pragma kernel ClearFoam
+#pragma kernel BuildFoam
+
+#define PI 3.14159265358979323846
+int _FFTResolution, _FFTCascadeCount, _FFTStageCount, _FFTStage, _FFTAxis, _SpectrumSeed;
+float _FFTNormalization, _OceanSimulationTime, _OceanSimulationDeltaTime;
+float4 _OceanWind, _OceanSpectrum, _OceanDispersion, _OceanOutput, _OceanFoamParameters;
+float4 _OceanCascadeGeometry[4], _OceanCascadeSpectrum[4];
+RWTexture2DArray<float4> _SpectrumInitial;
+RWTexture2DArray<float2> _SpectrumX, _SpectrumY, _SpectrumZ;
+Texture2D<float4> _FFTButterfly;
+Texture2DArray<float2> _FFTInput;
+RWTexture2DArray<float2> _FFTResult;
+RWTexture2DArray<float4> _OceanDisplacement, _OceanNormals;
+Texture2DArray<float> _FoamPrevious;
+RWTexture2DArray<float> _FoamResult;
+
+bool Outside(uint3 id) { return any(id.xy >= (uint)_FFTResolution) || id.z >= (uint)_FFTCascadeCount; }
+uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; return x ^ (x >> 16); }
+float2 Gaussian(uint seed)
+{
+    float u = max((Hash(seed) + 0.5) / 4294967296.0, 1e-7);
+    float v = (Hash(seed ^ 0x9e3779b9u) + 0.5) / 4294967296.0;
+    float s, c; sincos(2 * PI * v, s, c);
+    return sqrt(-2 * log(u)) * float2(c, s);
+}
+float2 MulComplex(float2 a, float2 b) { return float2(a.x*b.x-a.y*b.y, a.x*b.y+a.y*b.x); }
+
+float2 H0(uint2 coord, uint cascade)
+{
+    float2 k = ((int2)coord - (_FFTResolution >> 1)) * _OceanCascadeGeometry[cascade].w;
+    float km = length(k);
+    float4 band = _OceanCascadeSpectrum[cascade];
+    if (km < 1e-6 || km < band.x || km >= band.y || _OceanWind.z < 1e-5) return 0;
+    float g = _OceanDispersion.x;
+    float omega = sqrt(g * km);
+    float ratio = _OceanSpectrum.w / omega;
+    float pm = _OceanSpectrum.x * _OceanSpectrum.y * g*g / pow(omega, 5)
+               * exp(-_OceanSpectrum.z * ratio*ratio*ratio*ratio);
+    // Positive-k Fourier waves with exp(+i wt) travel along -k: peak energy travels with the wind.
+    float alignment = max(0, dot(-k / km, _OceanWind.xy));
+    float directional = lerp(2 / PI * alignment * alignment, 1 / (2 * PI), band.w);
+    float damping = exp(-km*km * _OceanDispersion.z*_OceanDispersion.z);
+    float dk = _OceanCascadeGeometry[cascade].w;
+    float density = pm * directional * (g / (2 * omega)) / km * dk*dk * damping;
+    // E|h0|²=P/2; the two counterpropagating coefficients recover the requested variance.
+    // N² compensates the normalized IFFT; amplitudes in metres do not depend on resolution.
+    uint seed = Hash(coord.x + coord.y * _FFTResolution) ^ Hash(cascade + asuint(_SpectrumSeed));
+    return Gaussian(seed) * sqrt(max(density, 0) * 0.25) / _FFTNormalization;
+}
+
+[numthreads(8,8,1)]
+void InitializeSpectrum(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    uint2 opposite = ((uint)_FFTResolution - id.xy) % (uint)_FFTResolution;
+    float2 a = H0(id.xy, id.z), b = H0(opposite, id.z);
+    _SpectrumInitial[id] = float4(a, b.x, -b.y);
+}
+
+[numthreads(8,8,1)]
+void UpdateSpectrum(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    float2 k = ((int2)id.xy - (_FFTResolution >> 1)) * _OceanCascadeGeometry[id.z].w;
+    float km = length(k);
+    float omega = sqrt(_OceanDispersion.x * km);
+    if (_OceanDispersion.y > 0) omega = floor(omega / _OceanDispersion.y) * _OceanDispersion.y;
+    float s, c; sincos(omega * _OceanSimulationTime, s, c);
+    float4 h0 = _SpectrumInitial[id];
+    float2 h = MulComplex(h0.xy, float2(c,s)) + MulComplex(h0.zw, float2(c,-s));
+    _SpectrumY[id] = h;
+    // The odd derivative vanishes on each self-conjugate Nyquist axis.
+    float2 oddK = float2(id.x == 0 ? 0 : k.x, id.y == 0 ? 0 : k.y) / max(km, 1e-6);
+    _SpectrumX[id] = float2(h.y, -h.x) * oddK.x;
+    _SpectrumZ[id] = float2(h.y, -h.x) * oddK.y;
+}
+
+[numthreads(8,8,1)]
+void InverseFFT(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    uint index = _FFTAxis == 0 ? id.x : id.y;
+    float4 butterfly = _FFTButterfly.Load(int3(index, _FFTStage, 0));
+    uint3 a = id, b = id;
+    if (_FFTAxis == 0) { a.x = (uint)butterfly.z; b.x = (uint)butterfly.w; }
+    else { a.y = (uint)butterfly.z; b.y = (uint)butterfly.w; }
+    _FFTResult[id] = _FFTInput.Load(int4(a,0)) + MulComplex(butterfly.xy, _FFTInput.Load(int4(b,0)));
+}
+
+[numthreads(8,8,1)]
+void BuildDisplacement(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    float sign = ((id.x + id.y) & 1) == 0 ? 1 : -1;
+    float scale = sign * _FFTNormalization * _OceanCascadeSpectrum[id.z].z;
+    float3 d = float3(_SpectrumX[id].x * _OceanOutput.x, _SpectrumY[id].x, _SpectrumZ[id].x * _OceanOutput.x) * scale;
+    _OceanDisplacement[id] = float4(d,0);
+}
+
+float3 DisplacementAt(int2 p, uint cascade)
+{
+    p = (p + _FFTResolution) & (_FFTResolution-1);
+    return _OceanDisplacement[uint3(p,cascade)].xyz;
+}
+[numthreads(8,8,1)]
+void BuildNormals(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    int2 p = id.xy;
+    float inv2dx = 0.5 / _OceanCascadeGeometry[id.z].z;
+    float3 dx = (DisplacementAt(p+int2(1,0),id.z)-DisplacementAt(p-int2(1,0),id.z)) * inv2dx;
+    float3 dz = (DisplacementAt(p+int2(0,1),id.z)-DisplacementAt(p-int2(0,1),id.z)) * inv2dx;
+    float jacobian = (1+dx.x)*(1+dz.z) - dx.z*dz.x;
+    dx.y *= _OceanOutput.y; dz.y *= _OceanOutput.y;
+    float3 n = cross(float3(0,0,1)+dz, float3(1,0,0)+dx);
+    n.y = max(n.y,0.02); // Folded waves keep a stable, upward shading normal.
+    _OceanNormals[id] = float4(normalize(n),jacobian);
+}
+[numthreads(8,8,1)]
+void ClearFoam(uint3 id : SV_DispatchThreadID)
+{
+    if (!Outside(id)) _FoamResult[id] = 0;
+}
+[numthreads(8,8,1)]
+void BuildFoam(uint3 id : SV_DispatchThreadID)
+{
+    if (Outside(id)) return;
+    float source = saturate((_OceanFoamParameters.x - _OceanNormals[id].w) / max(0.01,_OceanFoamParameters.y));
+    // Capillary-scale ripples should not paint the whole ocean white; whitecaps come from larger waves.
+    source *= saturate((_OceanCascadeGeometry[id.z].x - 5) / 45);
+    float dt = max(0,_OceanSimulationDeltaTime);
+    float history = _FoamPrevious.Load(int4(id,0)) * exp(-dt * _OceanFoamParameters.z);
+    _FoamResult[id] = saturate(lerp(history, 1, 1-exp(-source * _OceanFoamParameters.w * dt)));
+}
