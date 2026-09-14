@@ -22,7 +22,11 @@ namespace WaterSystem.Ocean
         public Vector2 DisplacementPadding = new Vector2(2, 10);
 
         [Header("Rendering")]
+        public OceanShadingMode ShadingMode = OceanShadingMode.Physical;
+        public OceanStylizedSettings Stylized = new OceanStylizedSettings();
         public OceanRenderSettings Rendering = new OceanRenderSettings();
+        [Header("Whitecap spray particles")]
+        public OceanSpraySettings Spray = new OceanSpraySettings();
         [SerializeField, HideInInspector, FormerlySerializedAs("SurfaceMaterial")] Material legacySurfaceMaterial;
         public bool PreviewSimulation = true;
         [Header("Horizon")]
@@ -45,6 +49,12 @@ namespace WaterSystem.Ocean
         public string LastCameraName { get; private set; }
         public float MinimumPatchSize => RootSize / (1 << Mathf.Clamp(MaxDepth, 0, 8));
         public Material RuntimeMaterial => runtimeMaterial;
+        // Shared whitecap inputs keep the GPU spray emitter aligned with the active surface style.
+        public Color ActiveFoamColor => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamColor : Rendering.FoamColor;
+        public float ActiveFoamStrength => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamStrength : Rendering.FoamStrength;
+        public float ActiveFoamScale => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamScale : Rendering.FoamScale;
+        public bool UsesSceneTextures => ShadingMode == OceanShadingMode.Stylized ? Stylized.UseSceneTextures : Rendering.UseSceneTextures;
+        public Texture2D ActiveFoamTexture => ShadingMode == OceanShadingMode.Stylized ? OceanResources.Load().StylizedFoam : OceanResources.Load().Foam;
 
         sealed class CameraState
         {
@@ -53,6 +63,7 @@ namespace WaterSystem.Ocean
             public readonly OceanInstanceBatch[] Batches = new OceanInstanceBatch[16];
             public readonly MaterialPropertyBlock Properties = new MaterialPropertyBlock();
             public readonly OceanInstanceBatch Horizon = new OceanInstanceBatch();
+            public readonly OceanSpraySystem Spray = new OceanSpraySystem();
             public Vector3 BuiltCamera, BuiltCenter;
             public bool Built;
             public int LastSeenFrame;
@@ -90,6 +101,8 @@ namespace WaterSystem.Ocean
             Simulation=fft;
             fft.RunInEditMode=PreviewSimulation;
             Rendering ??= new OceanRenderSettings();
+            Stylized ??= new OceanStylizedSettings();
+            Spray ??= new OceanSpraySettings();
             if(legacySurfaceMaterial!=null)
             {
                 Rendering.ImportLegacy(legacySurfaceMaterial);
@@ -125,13 +138,21 @@ namespace WaterSystem.Ocean
                 rebuildRequested = false;
                 geometryHash=hash;
             }
-            if (meshes != null) return;
             var resources=OceanResources.Load();
-            if(resources.SurfaceShader==null)throw new InvalidOperationException("OceanDefaults is missing its surface shader.");
-            runtimeMaterial = new Material(resources.SurfaceShader);
-            runtimeMaterial.name = name + " (Ocean runtime material)";
-            runtimeMaterial.hideFlags = HideFlags.HideAndDontSave;
-            runtimeMaterial.enableInstancing = true;
+            var shader = ShadingMode == OceanShadingMode.Stylized ? resources.StylizedSurfaceShader : resources.SurfaceShader;
+            if (shader == null) throw new InvalidOperationException("OceanDefaults is missing its " + ShadingMode + " surface shader.");
+            if (runtimeMaterial == null || runtimeMaterial.shader != shader)
+            {
+                // Appearance switches must not release geometry, FFT textures or particle history.
+                DestroyOwned(runtimeMaterial);
+                runtimeMaterial = new Material(shader)
+                {
+                    name = name + " (" + ShadingMode + " ocean runtime material)",
+                    hideFlags = HideFlags.HideAndDontSave,
+                    enableInstancing = true
+                };
+            }
+            if (meshes != null) return;
             horizonMesh=OceanHorizonMesh.Create();
             meshes = new Mesh[16];
             triangleCounts = new int[16];
@@ -156,7 +177,8 @@ namespace WaterSystem.Ocean
             }
             try { EnsureResources(); }
             catch (Exception exception) { Debug.LogException(exception, this); enabled = false; return; }
-            Rendering.Apply(runtimeMaterial,OceanResources.Load());
+            if (ShadingMode == OceanShadingMode.Stylized) Stylized.Apply(runtimeMaterial, OceanResources.Load());
+            else Rendering.Apply(runtimeMaterial, OceanResources.Load());
             UpdateSimulation();
             if (!cameras.TryGetValue(camera, out var state))
             {
@@ -224,6 +246,7 @@ namespace WaterSystem.Ocean
             }
             LastLeafCount = tree.Leaves.Count;
             LastCameraName = camera.name;
+            state.Spray.Render(this, simulationFailed ? null : activeSimulation as FFTCompute, camera, center);
             lastState = state;
         }
 
@@ -251,7 +274,11 @@ namespace WaterSystem.Ocean
             expiredCameras.Clear();
             foreach (var pair in cameras)
                 if (pair.Key == null || Time.frameCount - pair.Value.LastSeenFrame > 120) expiredCameras.Add(pair.Key);
-            foreach (var expired in expiredCameras) cameras.Remove(expired);
+            foreach (var expired in expiredCameras)
+            {
+                cameras[expired].Spray.Dispose();
+                cameras.Remove(expired);
+            }
             double now = Time.timeAsDouble;
             float delta = previousTime == 0 ? 0 : Mathf.Clamp((float)(now - previousTime), 0, 0.1f);
             previousTime = now;
@@ -296,6 +323,7 @@ namespace WaterSystem.Ocean
             horizonMesh=null;
             meshes = null;
             runtimeMaterial = null;
+            foreach (var state in cameras.Values) state.Spray.Dispose();
             cameras.Clear();
             lastState = null;
             LastLeafCount = LastVisibleCount = LastDrawCount = LastTriangleCount = 0;

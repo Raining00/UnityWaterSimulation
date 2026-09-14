@@ -42,7 +42,7 @@ namespace WaterSystem.Ocean
         [Min(0.01f)] public float peakFrequencyFactor = 0.87f;
         [Tooltip("Gaussian short-wave damping length in metres; zero disables damping.")]
         [Min(0)] public float shortWaveDamping = 0.01f;
-        [Tooltip("Minimum directional turbulence per cascade, as in KWS2's small-domain treatment.")]
+        [Tooltip("Minimum directional turbulence per cascade, with stronger spreading for smaller domains.")]
         public float[] cascadeTurbulenceFloor = { 0.5f, 0.25f, 0, 0 };
 
         [Header("Time and output")]

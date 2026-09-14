@@ -1,6 +1,6 @@
 # C# 海洋频谱模拟：参数、资源与接入约定
 
-本文件说明 `OceanSettings`、`OceanTextures`、`FFTCompute` 的数据和调度契约。完整 Kernel 已在 `Assets/WaterSystem/Shaders/OceanFFT.compute` 实现，配套 `WaterSystem/Ocean` Shader 用于海水渲染。打开 `Demo/DeepOceanDemo.unity` 可直接运行，完整使用说明见 `Assets/WaterSystem/README.md`。添加 OceanRenderer 会自动创建依赖组件；FFT 从 OceanDefaults 资源自动加载唯一默认 ComputeShader，不再要求手工指定。
+本文件说明 `OceanSettings`、`OceanTextures`、`FFTCompute` 的数据和调度契约。完整 Kernel 已在 `Assets/WaterSystem/Shaders/OceanFFT.compute` 实现，配套 `WaterSystem/Ocean` Shader 用于海水渲染。打开 `Demo/DeepOceanDemo.unity` 可直接运行，完整使用说明见 项目根目录的 `README.md`。添加 OceanRenderer 会自动创建依赖组件；FFT 从 OceanDefaults 资源自动加载唯一默认 ComputeShader，不再要求手工指定。
 
 ## 1. 代码组织与已有数据
 
@@ -37,7 +37,7 @@ Editor/
 | gravity | g，默认 9.81 m/s²；这里只约定深水色散 |
 | randomSeed | 初始随机种子；Compute 应结合级联索引和格点坐标派生随机数，避免各层重复噪声 |
 | spectrumAmplitude | 频谱能量倍率，作用于功率谱而非最终位移幅度 |
-| spectrumAlpha / spectrumBeta | PM 谱常量，默认 0.0081 / 1.291，与所参考的 KWS2 公式对应 |
+| spectrumAlpha / spectrumBeta | PM 谱常量，默认 0.0081 / 1.291 |
 | peakFrequencyFactor | 峰值角频率系数，默认 0.87 |
 | shortWaveDamping | 小波衰减长度 l，m；建议在功率谱中乘 exp(-k²l²)，0 表示不衰减 |
 | cascadeTurbulenceFloor | 每层方向扩散的最小值，默认 0.5、0.25、0、0 |
@@ -86,7 +86,7 @@ omegaLoop = 2π/loopPeriod           循环开启时，rad/s
 
 128×128、4 层时，每轴 7 级，二维三个复数分量共 `3 × 2 × 7 = 42` 次蝶形 Dispatch。稳定帧还包含频谱演化、位移合成、法线计算和泡沫更新，共 46 次 Dispatch；初始谱重建帧再加 1 次，新资源第一次使用再加 2 次泡沫清零。每次 Dispatch 的 Z 覆盖全部级联，并非逐层重复此数量。另有 3 次 CopyTexture 保存空间域分量。
 
-这是一种易于接入、可审查的通用逐级 FFT 调度契约，不声称达到 KWS2 的融合 Kernel 性能。后续可将一个方向的多级蝶形融入共享内存 Kernel，保留 Settings/Parameters/Textures 和 Provider 接口。
+当前使用通用逐级 FFT 调度，每一级单独提交 Kernel。后续可将一个方向的多级蝶形融入共享内存 Kernel，保留 Settings/Parameters/Textures 和 Provider 接口。
 
 ## 4. GPU 资源及复数布局
 
@@ -110,7 +110,7 @@ omegaLoop = 2π/loopPeriod           循环开启时，rad/s
 
 ## 5. Compute Shader 契约
 
-FFTCompute 接收 `OceanFFT.compute`，其中实现了以下七个 Kernel。C# 和 HLSL 名称必须保持同步；KWS2 原始 ComputeShader 的名称、资源布局和归一化不同，不能直接替换此资产。
+FFTCompute 接收 `OceanFFT.compute`，其中实现了以下七个 Kernel。C# 和 HLSL 名称必须保持同步；替换 ComputeShader 时需要匹配 Kernel 名称、资源布局和归一化约定。
 
 1. `InitializeSpectrum`：写 `_SpectrumInitial`。读取布局、种子、风、PM 谱、级联参数。零风速和 DC 项必须显式置零；所有线程必须检查 `id.x/y<N` 与 `id.z<CascadeCount`。
 2. `UpdateSpectrum`：读取 `_SpectrumInitial`，写 `_SpectrumX/Y/Z`。进行色散与时间演化，所有格点完整覆盖写入。

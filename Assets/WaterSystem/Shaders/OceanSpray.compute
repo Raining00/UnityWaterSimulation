@@ -1,0 +1,165 @@
+#pragma kernel ClearSpray
+#pragma kernel UpdateSpray
+#pragma kernel ClearTiles
+#pragma kernel CullSpray
+#include "OceanSprayData.hlsl"
+
+RWStructuredBuffer<OceanSprayParticle> _OceanSprayParticles;
+Texture2DArray<float4> _OceanDisplacement, _OceanNormals;
+Texture2DArray<float4> _SprayPreviousDisplacement;
+Texture2DArray<float> _OceanFoam;
+Texture2D<float4> _FoamTex;
+SamplerState sampler_Linear_Repeat;
+int _SprayCapacity, _SprayTick, _SpraySeed, _FFTCascadeCount, _FFTResolution;
+float _SprayDeltaTime, _OceanInfinite, _OceanSimulationTime;
+float4 _OceanDomainSizes, _OceanOrigin, _SprayCenterRadius;
+float4 _SprayEmission, _SprayLifetimeSize, _SprayMotion, _SprayWind, _SprayFoam;
+float4 _SprayDynamics;
+float _SprayBurstSpread;
+AppendStructuredBuffer<uint> _SprayVisibleIndices;
+RWStructuredBuffer<uint> _SprayTiles;
+int _SprayTileCount;
+float4 _SprayTileLayout, _SpraySizeMultipliers, _SprayFrustum[6];
+float4x4 _SprayViewProjection;
+
+uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; return x ^ (x >> 16); }
+float Random(inout uint state) { state = Hash(state); return (state & 0x00ffffffu) / 16777216.0; }
+float Weight(float2 xz)
+{
+    float2 d = abs(xz - _OceanOrigin.xz);
+    if (max(d.x,d.y) >= _OceanOrigin.w * 0.5) return 0;
+    return _OceanInfinite < 0.5 ? 1 : 1-smoothstep(_OceanOrigin.w*0.4,_OceanOrigin.w*0.5,max(d.x,d.y));
+}
+float3 Displacement(float2 xz)
+{
+    float3 result = 0;
+    for (int c=0;c<_FFTCascadeCount;c++)
+        result += _OceanDisplacement.SampleLevel(sampler_Linear_Repeat,float3(xz/_OceanDomainSizes[c]+0.5/_FFTResolution,c),0).xyz;
+    return result * Weight(xz);
+}
+
+[numthreads(64,1,1)]
+void ClearSpray(uint id : SV_DispatchThreadID)
+{
+    if (id < (uint)_SprayCapacity) _OceanSprayParticles[id] = (OceanSprayParticle)0;
+}
+
+[numthreads(64,1,1)]
+void UpdateSpray(uint id : SV_DispatchThreadID)
+{
+    if (id >= (uint)_SprayCapacity) return;
+    OceanSprayParticle p = _OceanSprayParticles[id];
+    float dt = _SprayDeltaTime;
+    if (p.velocityLife.w > 0)
+    {
+        p.positionAge.w += dt;
+        float mist = p.appearance.z == 1 ? 1 : 0;
+        float3 wind = float3(_SprayWind.x,0,_SprayWind.y) * _SprayWind.z;
+        float3 acceleration = float3(0,-_SprayMotion.z*lerp(1,0.25,mist),0);
+        // Smooth spatial gusts, strongest on mist; no per-frame random velocity jitter.
+        float3 q = p.positionAge.xyz*0.6 + _OceanSimulationTime*float3(0.7,0.4,0.5);
+        acceleration += float3(sin(q.y)+cos(q.z),sin(q.z)+cos(q.x),sin(q.x)+cos(q.y))*_SprayDynamics.w*lerp(0.15,1,mist);
+        float drag = _SprayMotion.w * lerp(0.75,1.8,mist);
+        float3 deltaPosition;
+        if (drag > 0.001)
+        {
+            float decay = exp(-drag*dt);
+            float3 terminal = wind + acceleration/drag;
+            deltaPosition = terminal*dt + (p.velocityLife.xyz-terminal)*(1-decay)/drag;
+            p.velocityLife.xyz = terminal + (p.velocityLife.xyz-terminal)*decay;
+        }
+        else
+        {
+            deltaPosition = p.velocityLife.xyz*dt + 0.5*acceleration*dt*dt;
+            p.velocityLife.xyz += acceleration*dt;
+        }
+        p.positionAge.xyz += deltaPosition;
+        // Warm-start the horizontal inverse map from last frame: two samples instead of three.
+        float2 baseXZ = p.surface.xy + deltaPosition.xz;
+        baseXZ = p.positionAge.xz - Displacement(baseXZ).xz;
+        float surface = _OceanOrigin.y + Displacement(baseXZ).y;
+        p.surface.xy = baseXZ;
+        p.surface.w = p.positionAge.y - surface;
+        if (p.positionAge.w >= p.velocityLife.w ||
+            length(p.positionAge.xz-_SprayCenterRadius.xz) > _SprayCenterRadius.w*1.2 ||
+            (p.positionAge.w > 0.08 && p.positionAge.y < surface + 0.02))
+            p.velocityLife.w = 0;
+        _OceanSprayParticles[id] = p;
+        return;
+    }
+    uint state = Hash(id ^ Hash((uint)_SprayTick) ^ (uint)_SpraySeed);
+    // Time-based hazard avoids frame-rate-dependent emission. Only available slots attempt emission.
+    if (Random(state) >= 1-exp(-_SprayEmission.x*dt)) return;
+    // Four neighboring slots share a short-lived source patch, producing coherent crest bursts.
+    uint sourceState = Hash((id/4) ^ Hash((uint)floor(_OceanSimulationTime*8)) ^ (uint)_SpraySeed);
+    float angle = Random(sourceState)*6.2831853;
+    float radius = sqrt(Random(sourceState))*_SprayCenterRadius.w;
+    float2 baseXZ = _SprayCenterRadius.xz + float2(cos(angle),sin(angle))*radius;
+    baseXZ += float2(Random(state)-0.5,Random(state)-0.5)*_SprayBurstSpread;
+    float weight = Weight(baseXZ);
+    if (weight <= 0) return;
+    float foam = 0, breaking = 0;
+    float3 displacement = 0, previousDisplacement = 0;
+    float2 slope = 0;
+    for (int c=0;c<_FFTCascadeCount;c++)
+    {
+        float3 uv = float3(baseXZ/_OceanDomainSizes[c]+0.5/_FFTResolution,c);
+        float4 n = _OceanNormals.SampleLevel(sampler_Linear_Repeat,uv,0);
+        float f = _OceanFoam.SampleLevel(sampler_Linear_Repeat,uv,0);
+        foam = 1-(1-foam)*(1-f);
+        float source = saturate((_SprayFoam.x-n.w)/max(0.01,_SprayFoam.y));
+        source *= saturate((_OceanDomainSizes[c]-5)/45);
+        breaking = 1-(1-breaking)*(1-source);
+        slope += -n.xz/max(n.y,0.15);
+        displacement += _OceanDisplacement.SampleLevel(sampler_Linear_Repeat,uv,0).xyz;
+        previousDisplacement += _SprayPreviousDisplacement.SampleLevel(sampler_Linear_Repeat,uv,0).xyz;
+    }
+    // Same two scrolling detail samples and coverage composition as OceanSurface.shader.
+    float2 uvFoam = baseXZ * _SprayFoam.w;
+    float detail1 = _FoamTex.SampleLevel(sampler_Linear_Repeat,uvFoam+_OceanSimulationTime*float2(0.008,0.004),0).r;
+    float detail2 = _FoamTex.SampleLevel(sampler_Linear_Repeat,uvFoam*0.63-_OceanSimulationTime*float2(0.003,0.006),0).r;
+    foam = saturate(foam*weight*_SprayFoam.z)*smoothstep(0.15,0.8,(detail1+detail2)*0.5);
+    if (foam <= _SprayEmission.y || breaking <= _SprayEmission.z) return;
+    float intensity = smoothstep(_SprayEmission.y,1,foam)*sqrt(breaking);
+    if (Random(state) > intensity) return;
+    float3 normal = normalize(float3(-slope.x*weight,1,-slope.y*weight));
+    float kind = Random(state) < _SprayEmission.w ? 1 : (Random(state) < _SprayDynamics.z ? 2 : 0);
+    float speed = lerp(_SprayMotion.x,_SprayMotion.y,Random(state))*lerp(0.5,1,sqrt(breaking));
+    float3 waveVelocity = (displacement-previousDisplacement)*weight/max(dt,0.0001)*_SprayDynamics.x;
+    waveVelocity *= min(1,_SprayDynamics.y/max(length(waveVelocity),0.0001));
+    float3 velocity = float3(_SprayWind.x,0,_SprayWind.y)*_SprayWind.z;
+    velocity += waveVelocity;
+    velocity += normal*speed*0.35 + float3((Random(state)-0.5)*0.7,speed,(Random(state)-0.5)*0.7);
+    p.positionAge = float4(float3(baseXZ.x,_OceanOrigin.y,baseXZ.y)+displacement*weight+float3(0,0.06,0),0);
+    p.velocityLife = float4(velocity,lerp(_SprayLifetimeSize.x,_SprayLifetimeSize.y,Random(state)));
+    // Size distribution favors fine droplets, with sparse larger clusters.
+    float sizeRandom = Random(state);
+    p.appearance = float4(lerp(_SprayLifetimeSize.z,_SprayLifetimeSize.w,sizeRandom*sizeRandom),Random(state),kind,lerp(0.4,1,foam));
+    p.surface = float4(baseXZ,length(velocity),0.06);
+    _OceanSprayParticles[id] = p;
+}
+
+[numthreads(64,1,1)]
+void ClearTiles(uint id : SV_DispatchThreadID)
+{
+    if (id < (uint)_SprayTileCount) _SprayTiles[id] = 0;
+}
+
+[numthreads(64,1,1)]
+void CullSpray(uint id : SV_DispatchThreadID)
+{
+    if (id >= (uint)_SprayCapacity) return;
+    OceanSprayParticle p = _OceanSprayParticles[id];
+    if (p.velocityLife.w <= 0) return;
+    float scale = p.appearance.z == 1 ? _SpraySizeMultipliers.x : (p.appearance.z == 2 ? _SpraySizeMultipliers.y : 1);
+    float radius = p.appearance.x*scale*3;
+    for (int i=0;i<6;i++)
+        if (dot(_SprayFrustum[i].xyz,p.positionAge.xyz)+_SprayFrustum[i].w < -radius) return;
+    float4 clipPos = mul(_SprayViewProjection,float4(p.positionAge.xyz,1));
+    if (clipPos.w <= 0.001) return;
+    float2 uv = saturate(clipPos.xy/clipPos.w*0.5+0.5);
+    uint2 tile = min((uint2)(uv*_SprayTileLayout.xy),(uint2)_SprayTileLayout.xy-1);
+    uint count;
+    InterlockedAdd(_SprayTiles[tile.y*(uint)_SprayTileLayout.x+tile.x],1,count);
+    if (count < (uint)_SprayTileLayout.z) _SprayVisibleIndices.Append(id);
+}

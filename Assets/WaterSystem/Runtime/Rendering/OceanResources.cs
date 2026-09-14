@@ -6,7 +6,12 @@ namespace WaterSystem.Ocean
     public sealed class OceanResources : ScriptableObject
     {
         public Shader SurfaceShader;
+        public Shader StylizedSurfaceShader;
+        public Texture2D StylizedNormal, StylizedFoam, StylizedIntersection, StylizedCaustic, StylizedSky;
         public ComputeShader FFT;
+        public ComputeShader SprayCompute;
+        public Shader SprayShader;
+        public Texture2D SplashAtlas;
         public Texture2D Foam, Caustic;
         public ShaderVariantCollection Variants;
         static OceanResources cached;

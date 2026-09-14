@@ -1,34 +1,20 @@
-Shader "WaterSystem/Ocean"
+Shader "WaterSystem/OceanStylized"
 {
+    // All appearance values are supplied by OceanStylizedSettings; no material asset is needed.
     Properties
     {
-        _DeepColor ("Deep water scattering", Color) = (0.006,0.09,0.12,1)
-        _ShallowColor ("Lit water scattering", Color) = (0.035,0.38,0.32,1)
-        _Absorption ("RGB absorption per metre", Vector) = (0.22,0.065,0.035,0)
-        _Scattering ("Scattering density", Range(0.001,1)) = 0.12
-        _Roughness ("Surface roughness", Range(0.04,0.7)) = 0.16
-        _NormalStrength ("Detail normal strength", Range(0,3)) = 1
-        _RefractionStrength ("Screen refraction", Range(0,0.08)) = 0.018
-        _ReflectionStrength ("Environment reflection", Range(0,2)) = 1
-        _SkyHorizon ("Fallback sky horizon", Color) = (0.48,0.65,0.76,1)
-        _SkyZenith ("Fallback sky zenith", Color) = (0.08,0.27,0.5,1)
-        _SubsurfaceStrength ("Wave backlighting", Range(0,3)) = 0.65
-        _FoamTex ("Foam detail", 2D) = "white" {}
-        _FoamColor ("Foam color", Color) = (0.87,0.94,0.93,1)
-        _FoamScale ("Foam detail repeats per metre", Float) = 0.5
-        _FoamStrength ("Foam opacity", Range(0,3)) = 1.5
-        _CausticTex ("Caustic pattern", 2D) = "black" {}
-        _CausticScale ("Caustic repeats per metre", Float) = 0.12
-        _CausticStrength ("Caustic brightness", Range(0,5)) = 0.6
-        _CausticDepth ("Caustic depth falloff (m)", Float) = 18
-        [Toggle] _UseSceneTextures ("URP depth and opaque textures available", Float) = 1
+        [HideInInspector] _DetailNormal ("Detail normal", 2D) = "bump" {}
+        [HideInInspector] _FoamTex ("Whitecaps", 2D) = "white" {}
+        [HideInInspector] _ShoreNoise ("Intersection noise", 2D) = "gray" {}
+        [HideInInspector] _CausticTex ("Caustics", 2D) = "black" {}
+        [HideInInspector] _SkyTex ("Fallback cloud sky", 2D) = "black" {}
     }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Transparent" "Queue"="Transparent-10" }
         Pass
         {
-            Name "OceanForward"
+            Name "StylizedOceanForward"
             Tags { "LightMode"="UniversalForwardOnly" }
             // Refraction is composed explicitly with the opaque color copy. Writing depth resolves overlapping waves.
             Blend One Zero
@@ -54,16 +40,20 @@ Shader "WaterSystem/Ocean"
             TEXTURE2D_ARRAY(_OceanFoam); SAMPLER(sampler_OceanFoam);
             TEXTURE2D(_FoamTex); SAMPLER(sampler_FoamTex);
             TEXTURE2D(_CausticTex); SAMPLER(sampler_CausticTex);
+            TEXTURE2D(_DetailNormal); SAMPLER(sampler_DetailNormal);
+            TEXTURE2D(_ShoreNoise); SAMPLER(sampler_ShoreNoise);
+            TEXTURE2D(_SkyTex); SAMPLER(sampler_SkyTex);
             // Per-ocean values are supplied by MaterialPropertyBlock, not shared global shader state.
             int _OceanSimulationReady, _FFTCascadeCount, _FFTResolution;
             float4 _OceanDomainSizes, _OceanOrigin;
             float _OceanSimulationTime;
             float _OceanInfinite, _OceanHorizonExtent;
             CBUFFER_START(UnityPerMaterial)
-                float4 _DeepColor, _ShallowColor, _Absorption, _SkyHorizon, _SkyZenith, _FoamColor;
-                float _Scattering, _Roughness, _NormalStrength, _RefractionStrength, _ReflectionStrength;
-                float _SubsurfaceStrength, _FoamScale, _FoamStrength, _CausticScale, _CausticStrength;
-                float _CausticDepth, _UseSceneTextures;
+                float4 _DeepColor, _ShallowColor, _TurquoiseColor, _HorizonColor, _SkyHorizon, _SkyZenith, _FoamColor;
+                float4 _WaterDepth, _NormalSpeed, _ShoreFoam;
+                float _HorizonBlendDistance, _NormalStrength, _DetailNormalStrength, _NormalScale, _DetailFadeDistance;
+                float _ReflectionStrength, _FresnelPower, _SunHighlight, _Roughness, _RefractionStrength, _SkyTextureStrength;
+                float _FoamScale, _FoamStrength, _CausticScale, _CausticStrength, _CausticDepth, _UseSceneTextures;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 horizon : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -212,81 +202,105 @@ Shader "WaterSystem/Ocean"
                     }
                 }
                 slope*=waveWeight;foam*=waveWeight;
-                float3 n = normalize(float3(-slope.x*_NormalStrength,1,-slope.y*_NormalStrength));
-                float faceSign = analyticalHorizon?(_WorldSpaceCameraPos.y>=_OceanOrigin.y?1:-1):IS_FRONT_VFACE(frontFace,1,-1);
-                n *= faceSign;
+                float t = _OceanSimulationTime;
+                float detailFade = (1-smoothstep(_DetailFadeDistance*0.25,_DetailFadeDistance,distanceToCamera))*waveWeight;
+                float2 normalUV = baseXZ*_NormalScale;
+                float3 detailA = UnpackNormal(SAMPLE_TEXTURE2D(_DetailNormal,sampler_DetailNormal,normalUV+t*_NormalSpeed.xy));
+                float3 detailB = UnpackNormal(SAMPLE_TEXTURE2D(_DetailNormal,sampler_DetailNormal,normalUV*0.73-t*_NormalSpeed.yx*0.8));
+                // Both maps use world XZ, so patch edges and LOD changes share the same ripples.
+                float2 detailSlope = (detailA.xy/max(detailA.z,0.2)+detailB.xy/max(detailB.z,0.2))*0.5;
+                float3 n = normalize(float3(-slope.x*_NormalStrength+detailSlope.x*_DetailNormalStrength*detailFade,
+                    1,-slope.y*_NormalStrength+detailSlope.y*_DetailNormalStrength*detailFade));
                 float3 v = GetWorldSpaceNormalizeViewDir(positionWS);
                 float nv = saturate(dot(n,v));
-                // Shadow coordinates and reflection probes lose useful precision tens of kilometres
-                // from the origin. The analytical far surface uses stable unshadowed sun/fallback sky.
                 Light sun;
                 if(analyticalHorizon)sun=GetMainLight();
                 else sun=GetMainLight(TransformWorldToShadowCoord(positionWS));
-                float sunlight = sun.shadowAttenuation * sun.distanceAttenuation;
-                float2 refractUV = screenUV;
-                float thickness = 80;
+                float sunlight = sun.shadowAttenuation*sun.distanceAttenuation;
+                float3 lighting = 0.55+sun.color*(0.30+0.15*saturate(dot(n,sun.direction)))*sunlight;
                 float3 background = _DeepColor.rgb;
-                float3 bottomWS = positionWS - float3(0,80,0);
+                float3 bottomWS = positionWS-float3(0,100,0);
+                float thickness = 100, verticalDepth = 100, intersectionDepth = 100;
                 bool hasBottom = false;
-                if (_UseSceneTextures > 0.5 && !analyticalHorizon)
+                if(_UseSceneTextures>0.5 && !analyticalHorizon)
                 {
-                    float originalDepth = SampleSceneDepth(screenUV);
-                    if (HasOpaqueDepth(originalDepth))
+                    float raw = SampleSceneDepth(screenUV);
+                    if(HasOpaqueDepth(raw))
                     {
-                        float3 opaqueWS = DepthPosition(screenUV,originalDepth);
-                        thickness = min(100, distance(positionWS,opaqueWS));
-                        float3 viewNormal = mul((float3x3)UNITY_MATRIX_V,n);
-                        refractUV = clamp(screenUV + viewNormal.xy*_RefractionStrength*saturate(thickness*0.2),0.002,0.998);
-                        float distortedDepth = SampleSceneDepth(refractUV);
-                        float3 candidate = DepthPosition(refractUV,distortedDepth);
-                        // Reject foreground silhouettes and samples above the current water surface.
-                        if (!HasOpaqueDepth(distortedDepth) || dot(candidate-positionWS,v)>0 || candidate.y>positionWS.y+0.2)
-                            refractUV = screenUV;
-                        else opaqueWS = candidate;
-                        bottomWS = opaqueWS;
-                        thickness = min(100,distance(positionWS,bottomWS));
-                        hasBottom = true;
-                        background = SampleSceneColor(refractUV);
+                        bottomWS = DepthPosition(screenUV,raw);
+                        // Preserve the undistorted shoreline; refracting its mask makes it detach from rocks.
+                        intersectionDepth = max(0,positionWS.y-bottomWS.y);
+                        hasBottom = dot(bottomWS-positionWS,v)<=0 && bottomWS.y<=positionWS.y+0.05;
+                        if(hasBottom)
+                        {
+                            float3 viewNormal = mul((float3x3)UNITY_MATRIX_V,n);
+                            float2 refractUV = clamp(screenUV+viewNormal.xy*_RefractionStrength*saturate(intersectionDepth),0.002,0.998);
+                            float distortedRaw = SampleSceneDepth(refractUV);
+                            float3 candidate = DepthPosition(refractUV,distortedRaw);
+                            if(!HasOpaqueDepth(distortedRaw) || dot(candidate-positionWS,v)>0 || candidate.y>positionWS.y)
+                                refractUV = screenUV;
+                            else bottomWS = candidate;
+                            thickness = min(100,distance(positionWS,bottomWS));
+                            verticalDepth = max(0,positionWS.y-bottomWS.y);
+                            background = SampleSceneColor(refractUV);
+                        }
                     }
                 }
-                float3 transmittance = exp(-max(_Absorption.rgb,0.001)*thickness);
-                float3 scatterColor = lerp(_ShallowColor.rgb,_DeepColor.rgb,1-exp(-thickness*_Scattering));
-                float3 lighting = 0.25 + sun.color*(0.35+0.65*saturate(sun.direction.y))*sunlight;
-                float3 refraction = background*transmittance + scatterColor*(1-transmittance)*lighting;
-                if (hasBottom && faceSign>0 && _CausticStrength>0)
+                // Independent vertical and view-path extinction keeps shallows transparent from above
+                // while long grazing rays acquire the saturated color of the reference ocean.
+                float3 waterColor = lerp(_ShallowColor.rgb,_TurquoiseColor.rgb,saturate(verticalDepth/_WaterDepth.x));
+                waterColor = lerp(waterColor,_DeepColor.rgb,smoothstep(_WaterDepth.x,_WaterDepth.y,verticalDepth));
+                float density = hasBottom ? saturate(1-exp(-verticalDepth*_WaterDepth.z-thickness*_WaterDepth.w)) : 1;
+                if(hasBottom && _CausticStrength>0)
                 {
-                    float depthBelowWater = max(0,_OceanOrigin.y-bottomWS.y);
                     float2 cuv = bottomWS.xz*_CausticScale;
-                    float t = _OceanSimulationTime*0.025;
-                    float c1 = SAMPLE_TEXTURE2D(_CausticTex,sampler_CausticTex,cuv+float2(t,-t*0.7)).r;
-                    float c2 = SAMPLE_TEXTURE2D(_CausticTex,sampler_CausticTex,cuv*1.17+float2(-t*0.6,t)).r;
-                    float caustic = min(c1,c2)*2 * exp(-depthBelowWater/max(_CausticDepth,0.1));
-                    refraction += background * sun.color * caustic * _CausticStrength * transmittance * sunlight;
+                    float c1 = SAMPLE_TEXTURE2D(_CausticTex,sampler_CausticTex,cuv+t*float2(0.019,-0.014)).r;
+                    float c2 = SAMPLE_TEXTURE2D(_CausticTex,sampler_CausticTex,cuv*0.8+t*float2(-0.011,0.017)).r;
+                    float caustic = min(c1,c2)*2*exp(-verticalDepth/_CausticDepth)*saturate(verticalDepth*2);
+                    background += background*sun.color*caustic*_CausticStrength*sunlight;
                 }
+                float3 color = lerp(background,waterColor*lighting,density);
                 float3 r = reflect(-v,n);
-                float3 fallbackSky = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(r.y)));
-                float3 environment=fallbackSky;
+                float3 sky = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(r.y)));
+                // Same latitude-longitude convention as Unity's panoramic skybox.
+                float2 skyUV = float2(0.5-atan2(r.z,r.x)/(2*PI),1-acos(clamp(r.y,-1,1))/PI);
+                float3 cloudSky = SAMPLE_TEXTURE2D_LOD(_SkyTex,sampler_SkyTex,skyUV,_Roughness*5).rgb;
+                sky = lerp(sky,cloudSky,_SkyTextureStrength);
+                float3 environment = sky;
                 if(!analyticalHorizon)
                 {
-                    environment = GlossyEnvironmentReflection(r,_Roughness,1);
-                    environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
+                    float3 probe = GlossyEnvironmentReflection(r,_Roughness,1);
+                    environment = lerp(sky,probe,saturate(dot(probe,float3(1,1,1))*5));
                 }
-                float fresnel = Fresnel(nv);
-                float3 color = lerp(refraction,environment*_ReflectionStrength,fresnel);
-                color += sun.color*sunlight*GGX(n,v,sun.direction,_Roughness);
-                float backlight = pow(saturate(dot(v,-sun.direction)),5) * (1-nv) * saturate(positionWS.y-_OceanOrigin.y+0.3);
-                color += _ShallowColor.rgb*sun.color*backlight*_SubsurfaceStrength*sunlight;
-                foam=saturate(foam*_FoamStrength);
-                if(foam>0.0001)
+                float reflection = (0.04+0.96*pow(1-nv,_FresnelPower))*_ReflectionStrength;
+                color = lerp(color,environment,reflection*saturate(density*4));
+                color += sun.color*sunlight*min(1.5,GGX(n,v,sun.direction,_Roughness))*_SunHighlight*saturate(density*4);
+                float horizonBlend = 1-exp(-distanceToCamera/_HorizonBlendDistance);
+                color = lerp(color,_HorizonColor.rgb,horizonBlend*0.8);
+
+                // Keep this whitecap mask identical to OceanSpray.compute: spray originates in FFT
+                // compression foam only, never in the screen-space shore decoration below.
+                float2 foamUV = baseXZ*_FoamScale;
+                float f1 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+t*float2(0.008,0.004),0).r;
+                float f2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-t*float2(0.003,0.006),0).r;
+                foam = saturate(foam*_FoamStrength)*smoothstep(0.15,0.8,(f1+f2)*0.5);
+                // Fade unresolved no-mip FFT foam before it becomes subpixel noise.
+                foam *= 1/(1+max(baseFootprint.x,baseFootprint.y)*_FoamScale);
+                float shoreFoam = 0;
+                if(hasBottom && _ShoreFoam.x>0)
                 {
-                    float2 foamUV = baseXZ * _FoamScale;
-                    float textureFoam = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+_OceanSimulationTime*float2(0.008,0.004),0).r;
-                    float textureFoam2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-_OceanSimulationTime*float2(0.003,0.006),0).r;
-                    foam *= smoothstep(0.15,0.8,(textureFoam+textureFoam2)*0.5);
-                    color = lerp(color,_FoamColor.rgb*(0.3+sun.color*saturate(dot(n,sun.direction))*sunlight),foam);
+                    float2 uv = baseXZ*_ShoreFoam.z;
+                    float noiseA = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv+t*float2(0.021,0.013)).r;
+                    float noiseB = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv*1.5-t*float2(0.017,0.011)).r;
+                    float noise = (noiseA+noiseB)*0.5;
+                    float shore = saturate(1-intersectionDepth/_ShoreFoam.y);
+                    float edge = 1-smoothstep(0.02,0.22+noise*0.15,intersectionDepth);
+                    float phase = intersectionDepth*7-t*_ShoreFoam.w*6+noise*2;
+                    float band = smoothstep(0.55,0.95,sin(phase));
+                    shoreFoam = saturate((edge*0.7+band*shore*shore)*smoothstep(0.16,0.72,noise)*_ShoreFoam.x);
                 }
-                if (faceSign<0)
-                    color = lerp(color,_DeepColor.rgb,1-exp(-distanceToCamera*0.04));
+                foam = 1-(1-foam)*(1-shoreFoam);
+                color = lerp(color,_FoamColor.rgb*(0.6+sun.color*0.4*sunlight),foam);
                 FragmentOutput output;
                 output.color=half4(MixFog(color,fog),1);
                 // Vertex depth clamp keeps triangles crossing the far plane alive. Recompute fragment

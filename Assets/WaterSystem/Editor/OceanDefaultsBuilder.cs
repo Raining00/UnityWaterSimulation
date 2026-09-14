@@ -19,7 +19,16 @@ namespace WaterSystem.Ocean.Editor
                 AssetDatabase.CreateAsset(resources,folder+"/OceanDefaults.asset");
             }
             resources.SurfaceShader=Shader.Find("WaterSystem/Ocean");
+            resources.StylizedSurfaceShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/WaterSystem/Shaders/OceanStylized.shader");
+            resources.StylizedNormal = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/SmoothWaves.png");
+            resources.StylizedFoam = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/FoamSea.png");
+            resources.StylizedIntersection = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/IntersectionNoise.png");
+            resources.StylizedCaustic = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/Caustics.png");
+            resources.StylizedSky = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/CloudSky.png");
             resources.FFT=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/WaterSystem/Shaders/OceanFFT.compute");
+            resources.SprayCompute=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/WaterSystem/Shaders/OceanSpray.compute");
+            resources.SprayShader=AssetDatabase.LoadAssetAtPath<Shader>("Assets/WaterSystem/Shaders/OceanSpray.shader");
+            resources.SplashAtlas=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/OceanSplashAtlas.png");
             resources.Foam=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/FluidsFoamTex.png");
             resources.Caustic=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Caustic_000.png");
             var variants=AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(folder+"/OceanVariants.shadervariants");
