@@ -278,8 +278,8 @@ Shader "WaterSystem/OceanStylized"
                 float horizonBlend = 1-exp(-distanceToCamera/_HorizonBlendDistance);
                 color = lerp(color,_HorizonColor.rgb,horizonBlend*0.8);
 
-                // Keep this whitecap mask identical to OceanSpray.compute: spray originates in FFT
-                // compression foam only, never in the screen-space shore decoration below.
+                // The whitecap mask comes from FFT compression foam only, never from the
+                // screen-space shore decoration below.
                 float2 foamUV = baseXZ*_FoamScale;
                 float f1 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+t*float2(0.008,0.004),0).r;
                 float f2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-t*float2(0.003,0.006),0).r;

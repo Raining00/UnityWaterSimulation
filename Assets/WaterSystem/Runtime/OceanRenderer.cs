@@ -25,8 +25,7 @@ namespace WaterSystem.Ocean
         public OceanShadingMode ShadingMode = OceanShadingMode.Physical;
         public OceanStylizedSettings Stylized = new OceanStylizedSettings();
         public OceanRenderSettings Rendering = new OceanRenderSettings();
-        [Header("Whitecap spray particles")]
-        public OceanSpraySettings Spray = new OceanSpraySettings();
+        public OceanUnderwaterSettings Underwater = new OceanUnderwaterSettings();
         [SerializeField, HideInInspector, FormerlySerializedAs("SurfaceMaterial")] Material legacySurfaceMaterial;
         public bool PreviewSimulation = true;
         [Header("Horizon")]
@@ -49,12 +48,64 @@ namespace WaterSystem.Ocean
         public string LastCameraName { get; private set; }
         public float MinimumPatchSize => RootSize / (1 << Mathf.Clamp(MaxDepth, 0, 8));
         public Material RuntimeMaterial => runtimeMaterial;
-        // Shared whitecap inputs keep the GPU spray emitter aligned with the active surface style.
-        public Color ActiveFoamColor => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamColor : Rendering.FoamColor;
-        public float ActiveFoamStrength => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamStrength : Rendering.FoamStrength;
-        public float ActiveFoamScale => ShadingMode == OceanShadingMode.Stylized ? Stylized.FoamScale : Rendering.FoamScale;
-        public bool UsesSceneTextures => ShadingMode == OceanShadingMode.Stylized ? Stylized.UseSceneTextures : Rendering.UseSceneTextures;
-        public Texture2D ActiveFoamTexture => ShadingMode == OceanShadingMode.Stylized ? OceanResources.Load().StylizedFoam : OceanResources.Load().Foam;
+
+        static readonly List<OceanRenderer> activeOceans = new List<OceanRenderer>();
+
+        internal static OceanRenderer FindUnderwaterOcean(Camera camera)
+        {
+            if (camera == null || (camera.cameraType != CameraType.Game && camera.cameraType != CameraType.SceneView)) return null;
+            OceanRenderer selected = null;
+            float closest = float.PositiveInfinity;
+            float nearRadius = camera.orthographic ? camera.orthographicSize * Mathf.Sqrt(1 + camera.aspect * camera.aspect)
+                : camera.nearClipPlane * (1 + Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * Mathf.Sqrt(1 + camera.aspect * camera.aspect));
+            foreach (var value in activeOceans)
+            {
+                if (value == null || !value.isActiveAndEnabled || value.ShadingMode != OceanShadingMode.Physical ||
+                    value.Underwater == null || !value.Underwater.Enabled || (camera.cullingMask & (1 << value.gameObject.layer)) == 0) continue;
+                if (camera.cameraType == CameraType.SceneView ? !value.ShowInSceneView : value.TargetCamera != null && value.TargetCamera != camera) continue;
+                float margin = Mathf.Max(value.DisplacementPadding.y, value.Waves.maximumDisplacement.y) + nearRadius;
+                if (camera.transform.position.y > value.transform.position.y + margin) continue;
+                var center = value.CameraCenter(camera);
+                if (!value.InfiniteHorizon && (Mathf.Abs(center.x-camera.transform.position.x)>value.RootSize*0.5f+nearRadius ||
+                    Mathf.Abs(center.z-camera.transform.position.z)>value.RootSize*0.5f+nearRadius)) continue;
+                float difference = Mathf.Abs(camera.transform.position.y-center.y);
+                if (difference < closest) { closest = difference; selected = value; }
+            }
+            return selected;
+        }
+
+        Vector3 CameraCenter(Camera camera)
+        {
+            var center = transform.position;
+            if (FollowCamera)
+            {
+                float step = MinimumPatchSize;
+                center.x += Mathf.Round((camera.transform.position.x-center.x)/step)*step;
+                center.z += Mathf.Round((camera.transform.position.z-center.z)/step)*step;
+            }
+            return center;
+        }
+
+        internal void BindUnderwater(MaterialPropertyBlock properties, Camera camera)
+        {
+            var center = CameraCenter(camera);
+            properties.SetVector(OriginId, new Vector4(center.x,center.y,center.z,RootSize));
+            properties.SetFloat("_OceanInfinite", InfiniteHorizon ? 1 : 0);
+            properties.SetInt("_OceanSimulationReady", 0);
+            if (activeSimulation != null && !simulationFailed) activeSimulation.BindResources(properties, camera);
+            Underwater.Bind(properties, Rendering);
+            // Wall-clock time drives the flow distortion, so the wobble stays alive even when the
+            // FFT is paused. Wave-slope detail still comes from _OceanSimulationTime via the textures.
+            properties.SetFloat("_UnderwaterTime", (float)Time.timeAsDouble);
+            var sun = RenderSettings.sun;
+            bool sunActive = sun != null && sun.isActiveAndEnabled;
+            Color light = sunActive ? sun.color.linear * sun.intensity * Mathf.Clamp01(-sun.transform.forward.y) : Color.gray;
+            properties.SetColor("_UnderwaterSun", light);
+            // The shaft march normalises this, so it must never be the zero vector. Without an active
+            // sun the beams simply fall back to straight overhead.
+            Vector3 toSun = sunActive ? -sun.transform.forward : Vector3.up;
+            properties.SetVector("_UnderwaterSunDirection", new Vector4(toSun.x, toSun.y, toSun.z, 0));
+        }
 
         sealed class CameraState
         {
@@ -63,7 +114,6 @@ namespace WaterSystem.Ocean
             public readonly OceanInstanceBatch[] Batches = new OceanInstanceBatch[16];
             public readonly MaterialPropertyBlock Properties = new MaterialPropertyBlock();
             public readonly OceanInstanceBatch Horizon = new OceanInstanceBatch();
-            public readonly OceanSpraySystem Spray = new OceanSpraySystem();
             public Vector3 BuiltCamera, BuiltCenter;
             public bool Built;
             public int LastSeenFrame;
@@ -89,6 +139,7 @@ namespace WaterSystem.Ocean
         void OnEnable()
         {
             EnsureComponents();
+            if (!activeOceans.Contains(this)) activeOceans.Add(this);
             RenderPipelineManager.beginCameraRendering += BeginCameraRendering;
             rebuildRequested = true;
         }
@@ -102,7 +153,7 @@ namespace WaterSystem.Ocean
             fft.RunInEditMode=PreviewSimulation;
             Rendering ??= new OceanRenderSettings();
             Stylized ??= new OceanStylizedSettings();
-            Spray ??= new OceanSpraySettings();
+            Underwater ??= new OceanUnderwaterSettings();
             if(legacySurfaceMaterial!=null)
             {
                 Rendering.ImportLegacy(legacySurfaceMaterial);
@@ -111,6 +162,7 @@ namespace WaterSystem.Ocean
         }
         void OnDisable()
         {
+            activeOceans.Remove(this);
             RenderPipelineManager.beginCameraRendering -= BeginCameraRendering;
             ReleaseResources();
         }
@@ -178,7 +230,7 @@ namespace WaterSystem.Ocean
             try { EnsureResources(); }
             catch (Exception exception) { Debug.LogException(exception, this); enabled = false; return; }
             if (ShadingMode == OceanShadingMode.Stylized) Stylized.Apply(runtimeMaterial, OceanResources.Load());
-            else Rendering.Apply(runtimeMaterial, OceanResources.Load());
+            else { Rendering.Apply(runtimeMaterial, OceanResources.Load()); Underwater.ApplySurface(runtimeMaterial); }
             UpdateSimulation();
             if (!cameras.TryGetValue(camera, out var state))
             {
@@ -246,7 +298,6 @@ namespace WaterSystem.Ocean
             }
             LastLeafCount = tree.Leaves.Count;
             LastCameraName = camera.name;
-            state.Spray.Render(this, simulationFailed ? null : activeSimulation as FFTCompute, camera, center);
             lastState = state;
         }
 
@@ -274,11 +325,7 @@ namespace WaterSystem.Ocean
             expiredCameras.Clear();
             foreach (var pair in cameras)
                 if (pair.Key == null || Time.frameCount - pair.Value.LastSeenFrame > 120) expiredCameras.Add(pair.Key);
-            foreach (var expired in expiredCameras)
-            {
-                cameras[expired].Spray.Dispose();
-                cameras.Remove(expired);
-            }
+            foreach (var expired in expiredCameras) cameras.Remove(expired);
             double now = Time.timeAsDouble;
             float delta = previousTime == 0 ? 0 : Mathf.Clamp((float)(now - previousTime), 0, 0.1f);
             previousTime = now;
@@ -323,7 +370,6 @@ namespace WaterSystem.Ocean
             horizonMesh=null;
             meshes = null;
             runtimeMaterial = null;
-            foreach (var state in cameras.Values) state.Spray.Dispose();
             cameras.Clear();
             lastState = null;
             LastLeafCount = LastVisibleCount = LastDrawCount = LastTriangleCount = 0;

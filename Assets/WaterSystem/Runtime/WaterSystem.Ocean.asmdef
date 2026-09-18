@@ -1,6 +1,9 @@
 {
   "name": "WaterSystem.Ocean",
   "rootNamespace": "WaterSystem.Ocean",
-  "references": [],
+  "references": [
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
+  ],
   "autoReferenced": true
 }

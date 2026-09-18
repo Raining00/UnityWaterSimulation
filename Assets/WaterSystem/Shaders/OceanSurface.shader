@@ -64,6 +64,8 @@ Shader "WaterSystem/Ocean"
                 float _Scattering, _Roughness, _NormalStrength, _RefractionStrength, _ReflectionStrength;
                 float _SubsurfaceStrength, _FoamScale, _FoamStrength, _CausticScale, _CausticStrength;
                 float _CausticDepth, _UseSceneTextures;
+                float _UnderwaterEnabled, _UnderwaterIOR;
+                float4 _UnderwaterScatter;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 horizon : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -216,7 +218,7 @@ Shader "WaterSystem/Ocean"
                 float faceSign = analyticalHorizon?(_WorldSpaceCameraPos.y>=_OceanOrigin.y?1:-1):IS_FRONT_VFACE(frontFace,1,-1);
                 n *= faceSign;
                 float3 v = GetWorldSpaceNormalizeViewDir(positionWS);
-                float nv = saturate(dot(n,v));
+                float NoV = saturate(dot(n,v));
                 // Shadow coordinates and reflection probes lose useful precision tens of kilometres
                 // from the origin. The analytical far surface uses stable unshadowed sun/fallback sky.
                 Light sun;
@@ -271,11 +273,48 @@ Shader "WaterSystem/Ocean"
                     environment = GlossyEnvironmentReflection(r,_Roughness,1);
                     environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
                 }
-                float fresnel = Fresnel(nv);
+                float fresnel = Fresnel(NoV);
                 float3 color = lerp(refraction,environment*_ReflectionStrength,fresnel);
                 color += sun.color*sunlight*GGX(n,v,sun.direction,_Roughness);
-                float backlight = pow(saturate(dot(v,-sun.direction)),5) * (1-nv) * saturate(positionWS.y-_OceanOrigin.y+0.3);
+                float backlight = pow(saturate(dot(v,-sun.direction)),5) * (1-NoV) * saturate(positionWS.y-_OceanOrigin.y+0.3);
                 color += _ShallowColor.rgb*sun.color*backlight*_SubsurfaceStrength*sunlight;
+                if (faceSign<0 && _UnderwaterEnabled>0.5)
+                {
+                    // Water -> air: Snell's window and total internal reflection beyond the critical angle.
+                    float cosI = saturate(dot(n,v));
+                    float sinT2 = _UnderwaterIOR*_UnderwaterIOR*(1-cosI*cosI);
+                    float internalReflection = 1;
+                    float3 transmittedColor = _UnderwaterScatter.rgb;
+                    if (sinT2<1)
+                    {
+                        float cosT = sqrt(max(0,1-sinT2));
+                        float rs = (_UnderwaterIOR*cosI-cosT)/max(_UnderwaterIOR*cosI+cosT,1e-5);
+                        float rp = (cosI-_UnderwaterIOR*cosT)/max(cosI+_UnderwaterIOR*cosT,1e-5);
+                        internalReflection = saturate((rs*rs+rp*rp)*0.5);
+                        float3 airRay = refract(-v,n,_UnderwaterIOR);
+                        transmittedColor = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(airRay.y)));
+                        // Screen-space above-water objects are approximate; rays outside the viewport use sky.
+                        if (_UseSceneTextures>0.5 && !analyticalHorizon)
+                        {
+                            float4 projected = TransformWorldToHClip(positionWS+airRay*max(20,distanceToCamera*3));
+                            float4 screen = ComputeScreenPos(projected);
+                            float2 airUV = screen.xy/max(screen.w,1e-5);
+                            if (projected.w>0 && all(airUV>0.002) && all(airUV<0.998))
+                            {
+                                float raw = SampleSceneDepth(airUV);
+                                if (HasOpaqueDepth(raw) && DepthPosition(airUV,raw).y>positionWS.y-0.1)
+                                {
+                                    float2 edge = min(airUV,1-airUV);
+                                    float screenWeight = smoothstep(0.002,0.06,min(edge.x,edge.y));
+                                    transmittedColor = lerp(transmittedColor,SampleSceneColor(airUV),screenWeight);
+                                }
+                            }
+                        }
+                    }
+                    // No air-side GGX or repeated absorption here: the underwater pass integrates the view path once.
+                    color = lerp(transmittedColor,_UnderwaterScatter.rgb,internalReflection);
+                    foam *= 0.2;
+                }
                 foam=saturate(foam*_FoamStrength);
                 if(foam>0.0001)
                 {
@@ -285,10 +324,10 @@ Shader "WaterSystem/Ocean"
                     foam *= smoothstep(0.15,0.8,(textureFoam+textureFoam2)*0.5);
                     color = lerp(color,_FoamColor.rgb*(0.3+sun.color*saturate(dot(n,sun.direction))*sunlight),foam);
                 }
-                if (faceSign<0)
+                if (faceSign<0 && _UnderwaterEnabled<0.5)
                     color = lerp(color,_DeepColor.rgb,1-exp(-distanceToCamera*0.04));
                 FragmentOutput output;
-                output.color=half4(MixFog(color,fog),1);
+                output.color=half4(faceSign<0 && _UnderwaterEnabled>0.5 ? color : MixFog(color,fog),1);
                 // Vertex depth clamp keeps triangles crossing the far plane alive. Recompute fragment
                 // depth from the true interpolated world position so those triangles still occlude
                 // nearby opaque objects correctly, instead of interpolating the clamped corner depths.

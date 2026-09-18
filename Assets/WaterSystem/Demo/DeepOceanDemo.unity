@@ -324,13 +324,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 265525049}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.024905583, y: -0.9732292, z: 0.1891766, w: 0.12812813}
+  m_LocalRotation: {x: 0.035095338, y: -0.9376806, z: 0.3311295, w: 0.099381715}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 38.9, y: -167.9, z: 0}
 --- !u!114 &265525052
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1369,7 +1369,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanSettings
   windSpeed: 2.66
   windRotation: 25
-  windTurbulence: 0.651
+  windTurbulence: 0.066
   windZone: {fileID: 0}
   windZoneSpeedMultiplier: 1
   windZoneTurbulenceMultiplier: 1
@@ -1398,13 +1398,13 @@ MonoBehaviour:
   timeScale: 1
   timeOffset: 0
   loopPeriod: 0
-  heightScale: 1.5
-  choppiness: 0
+  heightScale: 3.97
+  choppiness: -1.97
   normalStrength: 3
   maximumDisplacement: {x: 5, y: 15}
-  foamThreshold: 0.493
-  foamSoftness: 0.25
-  foamDecay: 0.8
+  foamThreshold: 0.595
+  foamSoftness: 1.66
+  foamDecay: 1.8
   foamBuildRate: 3.47
 --- !u!114 &1950571329
 MonoBehaviour:
@@ -1478,34 +1478,31 @@ MonoBehaviour:
     CausticStrength: 0.6
     CausticDepth: 18
     UseSceneTextures: 1
-  Spray:
+  Underwater:
     Enabled: 1
-    Capacity: 17196
-    Radius: 20
-    EmissionRate: 12000
-    FoamThreshold: 0.12
-    BreakingThreshold: 0.02
-    Lifetime: {x: 0.65, y: 1.6}
-    Size: {x: 0.06, y: 0.18}
-    UpwardSpeed: {x: 2, y: 4}
-    WindInfluence: 0.25
-    Drag: 1.2
-    GravityScale: 0.8
-    MistFraction: 0.2
-    MistSizeMultiplier: 3.5
-    Opacity: 0.65
-    SoftIntersectionDistance: 0.35
-    Tint: {r: 1, g: 1, b: 1, a: 1}
-    WaveVelocityInheritance: 0.8
-    MaxInheritedSpeed: 8
-    SplashFraction: 0.35
-    SplashSizeMultiplier: 12
-    BurstSpread: 0.6
-    Turbulence: 0.65
-    HighlightStrength: 0.8
-    Backlighting: 0.6
-    ReceiveSunShadows: 1
-    MaxParticlesPerTile: 64
+    ScatteringColor: {r: 0.008, g: 0.12, b: 0.16, a: 1}
+    AbsorptionMultiplier: 1
+    ScatteringDensity: 0.035
+    MaximumDistance: 120
+    DepthLightFalloff: 0.025
+    WaterlineSoftness: 0.003
+    RefractiveIndex: 1.333
+    CausticStrength: 0.4
+    CausticDepth: 20
+    FlowSpeed: 0.25
+    DistortionStrength: 0.011
+    DistortionWaveWeight: 0.13
+    DistortionFlowWeight: 0.45
+    DistortionDistance: 25
+    DistortionScale: 0.008
+    DistortionDrift: {x: 0.9, y: 0.55}
+    DistortionPivot: 0.2
+    ShaftStrength: 0.8
+    ShaftScale: 0.06
+    ShaftAnisotropy: 0.7
+    ShaftDepthAbsorption: 0.35
+    ShaftSteps: 12
+    ShaftDrift: {x: 0.6, y: 0.35}
   legacySurfaceMaterial: {fileID: 0}
   PreviewSimulation: 1
   InfiniteHorizon: 1

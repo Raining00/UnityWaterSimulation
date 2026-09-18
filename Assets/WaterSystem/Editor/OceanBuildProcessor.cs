@@ -10,6 +10,7 @@ namespace WaterSystem.Ocean.Editor
         public int callbackOrder => -1000;
         public void OnPreprocessBuild(BuildReport report)
         {
+            OceanUnderwaterInstaller.EnsureInstalled();
             var settings = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset");
             if (settings.Length == 0)
                 throw new BuildFailedException("Cannot load GraphicsSettings to preserve ocean GPU instancing variants.");

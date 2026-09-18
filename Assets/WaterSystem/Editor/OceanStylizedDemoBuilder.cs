@@ -40,8 +40,6 @@ namespace WaterSystem.Ocean.Editor
                 ocean.Waves.separateCascadeBands = true;
                 ocean.Waves.foamThreshold = 0.9f; ocean.Waves.foamSoftness = 0.24f;
                 ocean.Waves.foamDecay = 0.75f;
-                ocean.Spray.Enabled = true;
-                ocean.Spray.Opacity = 0.45f;
 
                 var camera = new GameObject("Main Camera").AddComponent<Camera>();
                 camera.tag = "MainCamera";

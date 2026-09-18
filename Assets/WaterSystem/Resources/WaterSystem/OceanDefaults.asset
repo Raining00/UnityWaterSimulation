@@ -13,6 +13,8 @@ MonoBehaviour:
   m_Name: OceanDefaults
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanResources
   SurfaceShader: {fileID: 4800000, guid: e61e855cf08598547ac9a511869ec3da, type: 3}
+  UnderwaterShader: {fileID: 4800000, guid: 9136579c0f74b9f4fb4686d7e4eff848, type: 3}
+  UnderwaterDepthCopyShader: {fileID: 4800000, guid: d6dae50ee9e1bfa4db75f19f99355220, type: 3}
   StylizedSurfaceShader: {fileID: 4800000, guid: 323b89aafaafd1746bbb3aade3d466c8, type: 3}
   StylizedNormal: {fileID: 2800000, guid: 3728b594f32a4fd9a3ec5234b7ae47ac, type: 3}
   StylizedFoam: {fileID: 2800000, guid: 1047c412880f47e5bb5cc8e3a77312e6, type: 3}
@@ -20,9 +22,6 @@ MonoBehaviour:
   StylizedCaustic: {fileID: 2800000, guid: b356b215927548779063c1e5cbba4f85, type: 3}
   StylizedSky: {fileID: 2800000, guid: fd046d5539bc44ada19d85c2ca44e663, type: 3}
   FFT: {fileID: 7200000, guid: 215670438403bbc4f85978e368ae2ad8, type: 3}
-  SprayCompute: {fileID: 7200000, guid: 7059df12d3f24d86b106edfb0c87581e, type: 3}
-  SprayShader: {fileID: 4800000, guid: 9fa7f13bc321495080a077be5e2817ae, type: 3}
-  SplashAtlas: {fileID: 2800000, guid: f52d7ac5aed4446ab019c41d6f57aa77, type: 3}
   Foam: {fileID: 2800000, guid: dd539d6ad49bf3f4dbc540d170fffbb2, type: 3}
   Caustic: {fileID: 2800000, guid: 42926c5f243ad0a459f0278d26261802, type: 3}
   Variants: {fileID: 20000000, guid: aa08ea7853773b448b754e99c1951788, type: 2}
