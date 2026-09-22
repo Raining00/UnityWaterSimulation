@@ -131,6 +131,8 @@ GameObject:
   - component: {fileID: 98866383}
   - component: {fileID: 98866382}
   - component: {fileID: 98866381}
+  - component: {fileID: 98866386}
+  - component: {fileID: 98866385}
   m_Layer: 0
   m_Name: Fixed distance marker
   m_TagString: Untagged
@@ -233,6 +235,71 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &98866385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 98866380}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0d85575a104cd1449d3abe33be4a4d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
+  ocean: {fileID: 1950571329}
+  samplesPerAxis: {x: 3, y: 2, z: 3}
+  includeTriggerColliders: 0
+  insideTolerance: 0.0001
+  localSamplePoints:
+  - {x: -0.33333188, y: -0.5, z: -0.33333915}
+  - {x: 0, y: -0.5, z: -0.33333915}
+  - {x: 0.33333182, y: -0.5, z: -0.33333915}
+  - {x: -0.33333188, y: 0.5, z: -0.33333915}
+  - {x: 0, y: 0.5, z: -0.33333915}
+  - {x: 0.33333182, y: 0.5, z: -0.33333915}
+  - {x: -0.33333188, y: -0.5, z: 0}
+  - {x: 0, y: -0.5, z: 0}
+  - {x: 0.33333182, y: -0.5, z: 0}
+  - {x: -0.33333188, y: 0.5, z: 0}
+  - {x: 0, y: 0.5, z: 0}
+  - {x: 0.33333182, y: 0.5, z: 0}
+  - {x: -0.33333188, y: -0.5, z: 0.3333391}
+  - {x: 0, y: -0.5, z: 0.3333391}
+  - {x: 0.33333182, y: -0.5, z: 0.3333391}
+  - {x: -0.33333188, y: 0.5, z: 0.3333391}
+  - {x: 0, y: 0.5, z: 0.3333391}
+  - {x: 0.33333182, y: 0.5, z: 0.3333391}
+  localSamplingBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0.4999978, y: 1, z: 0.5000087}
+--- !u!54 &98866386
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 98866380}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &265525049
 GameObject:
   m_ObjectHideFlags: 0
@@ -632,6 +699,8 @@ GameObject:
   - component: {fileID: 906977774}
   - component: {fileID: 906977773}
   - component: {fileID: 906977772}
+  - component: {fileID: 906977777}
+  - component: {fileID: 906977776}
   m_Layer: 0
   m_Name: Fixed distance marker
   m_TagString: Untagged
@@ -734,6 +803,71 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &906977776
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 906977771}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0d85575a104cd1449d3abe33be4a4d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
+  ocean: {fileID: 1950571329}
+  samplesPerAxis: {x: 3, y: 2, z: 3}
+  includeTriggerColliders: 0
+  insideTolerance: 0.0001
+  localSamplePoints:
+  - {x: -0.33333188, y: -0.5, z: -0.33333188}
+  - {x: 0, y: -0.5, z: -0.33333188}
+  - {x: 0.33333182, y: -0.5, z: -0.33333188}
+  - {x: -0.33333188, y: 0.5, z: -0.33333188}
+  - {x: 0, y: 0.5, z: -0.33333188}
+  - {x: 0.33333182, y: 0.5, z: -0.33333188}
+  - {x: -0.33333188, y: -0.5, z: 0}
+  - {x: 0, y: -0.5, z: 0}
+  - {x: 0.33333182, y: -0.5, z: 0}
+  - {x: -0.33333188, y: 0.5, z: 0}
+  - {x: 0, y: 0.5, z: 0}
+  - {x: 0.33333182, y: 0.5, z: 0}
+  - {x: -0.33333188, y: -0.5, z: 0.33333182}
+  - {x: 0, y: -0.5, z: 0.33333182}
+  - {x: 0.33333182, y: -0.5, z: 0.33333182}
+  - {x: -0.33333188, y: 0.5, z: 0.33333182}
+  - {x: 0, y: 0.5, z: 0.33333182}
+  - {x: 0.33333182, y: 0.5, z: 0.33333182}
+  localSamplingBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0.4999978, y: 1, z: 0.4999978}
+--- !u!54 &906977777
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 906977771}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &1010577324
 GameObject:
   m_ObjectHideFlags: 0
@@ -858,6 +992,8 @@ GameObject:
   - component: {fileID: 1016855924}
   - component: {fileID: 1016855923}
   - component: {fileID: 1016855922}
+  - component: {fileID: 1016855927}
+  - component: {fileID: 1016855926}
   m_Layer: 0
   m_Name: Fixed distance marker
   m_TagString: Untagged
@@ -934,9 +1070,9 @@ CapsuleCollider:
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.5
-  m_Height: 2
+  m_Height: 2.0037303
   m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Center: {x: 0, y: 0.001863718, z: 0}
 --- !u!33 &1016855924
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -960,6 +1096,71 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1016855926
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016855921}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0d85575a104cd1449d3abe33be4a4d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
+  ocean: {fileID: 1950571329}
+  samplesPerAxis: {x: 3, y: 2, z: 3}
+  includeTriggerColliders: 0
+  insideTolerance: 0.0001
+  localSamplePoints:
+  - {x: -0.33333367, y: -0.49906886, z: -0.33333188}
+  - {x: 0, y: -0.49906886, z: -0.33333188}
+  - {x: 0.33333373, y: -0.49906886, z: -0.33333188}
+  - {x: -0.33333367, y: 0.5027963, z: -0.33333188}
+  - {x: 0, y: 0.5027963, z: -0.33333188}
+  - {x: 0.33333373, y: 0.5027963, z: -0.33333188}
+  - {x: -0.33333367, y: -0.49906886, z: 0}
+  - {x: 0, y: -0.49906886, z: 0}
+  - {x: 0.33333373, y: -0.49906886, z: 0}
+  - {x: -0.33333367, y: 0.5027963, z: 0}
+  - {x: 0, y: 0.5027963, z: 0}
+  - {x: 0.33333373, y: 0.5027963, z: 0}
+  - {x: -0.33333367, y: -0.49906886, z: 0.33333182}
+  - {x: 0, y: -0.49906886, z: 0.33333182}
+  - {x: 0.33333373, y: -0.49906886, z: 0.33333182}
+  - {x: -0.33333367, y: 0.5027963, z: 0.33333182}
+  - {x: 0, y: 0.5027963, z: 0.33333182}
+  - {x: 0.33333373, y: 0.5027963, z: 0.33333182}
+  localSamplingBounds:
+    m_Center: {x: 0, y: 0.001863718, z: 0}
+    m_Extent: {x: 0.50000054, y: 1.0018651, z: 0.4999978}
+--- !u!54 &1016855927
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016855921}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &1252512605
 GameObject:
   m_ObjectHideFlags: 0
@@ -1333,6 +1534,7 @@ GameObject:
   - component: {fileID: 1950571329}
   - component: {fileID: 1950571328}
   - component: {fileID: 1950571327}
+  - component: {fileID: 1950571331}
   m_Layer: 0
   m_Name: FFT Ocean
   m_TagString: Untagged
@@ -1527,6 +1729,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1950571331
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1950571326}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70364854964260149b50e2db878a9536, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanSurfaceQuerySystem
+  queryShader: {fileID: 7200000, guid: 71d1bd711adc57f4da4432c8091ae1d0, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

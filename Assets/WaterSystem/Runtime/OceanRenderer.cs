@@ -7,7 +7,7 @@ using UnityEngine.Serialization;
 namespace WaterSystem.Ocean
 {
     [ExecuteAlways, DisallowMultipleComponent]
-    [RequireComponent(typeof(OceanSettings), typeof(FFTCompute))]
+    [RequireComponent(typeof(OceanSettings), typeof(FFTCompute), typeof(OceanSurfaceQuerySystem))]
     [AddComponentMenu("Water System/Ocean")]
     public sealed class OceanRenderer : MonoBehaviour
     {
@@ -40,6 +40,16 @@ namespace WaterSystem.Ocean
         [HideInInspector] public OceanSimulationProvider Simulation;
         public OceanSettings Waves => GetComponent<OceanSettings>();
         public FFTCompute FFT => GetComponent<FFTCompute>();
+        public OceanSurfaceQuerySystem SurfaceQueries
+        {
+            get
+            {
+                if (surfaceQuerySystem == null)
+                    surfaceQuerySystem = GetComponent<OceanSurfaceQuerySystem>();
+
+                return surfaceQuerySystem;
+            }
+        }
 
         public int LastLeafCount { get; private set; }
         public int LastVisibleCount { get; private set; }
@@ -128,6 +138,7 @@ namespace WaterSystem.Ocean
         Mesh horizonMesh;
         int geometryHash;
         OceanSimulationProvider activeSimulation;
+        OceanSurfaceQuerySystem surfaceQuerySystem;
         CommandBuffer simulationCommands;
         int simulatedFrame = -1;
         double previousTime;
@@ -149,6 +160,8 @@ namespace WaterSystem.Ocean
             if(GetComponent<OceanSettings>()==null)gameObject.AddComponent<OceanSettings>();
             var fft=GetComponent<FFTCompute>();
             if(fft==null)fft=gameObject.AddComponent<FFTCompute>();
+            surfaceQuerySystem=GetComponent<OceanSurfaceQuerySystem>();
+            if(surfaceQuerySystem==null)surfaceQuerySystem=gameObject.AddComponent<OceanSurfaceQuerySystem>();
             Simulation=fft;
             fft.RunInEditMode=PreviewSimulation;
             Rendering ??= new OceanRenderSettings();
@@ -314,6 +327,7 @@ namespace WaterSystem.Ocean
                     {
                         var init = new OceanSimulationContext(this);
                         activeSimulation.Initialize(in init);
+                        surfaceQuerySystem?.Initialize(this);
                         simulationCommands = new CommandBuffer { name = "Ocean / FFT simulation" };
                     }
                     catch (Exception exception) { FailSimulation(exception); }
@@ -335,6 +349,13 @@ namespace WaterSystem.Ocean
                 simulationCommands.Clear();
                 var frame = new OceanSimulationFrame(now, delta, simulatedFrame);
                 activeSimulation.RecordSimulation(simulationCommands, in frame);
+
+                // Query work is appended after simulation work to the same command buffer. The
+                // query system receives a narrow immutable resource view, never the FFT component.
+                if (surfaceQuerySystem != null && surfaceQuerySystem.isActiveAndEnabled &&
+                    activeSimulation.TryGetSurfaceQueryResources(out var queryResources))
+                    surfaceQuerySystem.RecordQueries(simulationCommands, in queryResources, in frame);
+
                 // Submit once, before any ocean draw in this frame. The provider records its compute dispatches here.
                 Graphics.ExecuteCommandBuffer(simulationCommands);
             }
@@ -349,6 +370,7 @@ namespace WaterSystem.Ocean
         }
         void ReleaseSimulation()
         {
+            surfaceQuerySystem?.Release();
             if (activeSimulation != null)
             {
                 try { activeSimulation.Release(); }

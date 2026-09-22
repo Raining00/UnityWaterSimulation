@@ -1,0 +1,110 @@
+#pragma kernel QueryKernel
+#pragma target 4.5
+
+// CPU binding contract (implemented separately):
+// _QueryPoints      StructuredBuffer<float3>, stride 12 bytes.
+// _QueryResults     RWStructuredBuffer<SurfaceQueryResult>, stride 32 bytes.
+// _QueryPointCount  Number of valid elements, which may be smaller than buffer capacity.
+
+#define MAX_OCEAN_CASCADES 4
+#define HORIZONTAL_INVERSION_ITERATIONS 4
+
+struct SurfaceQueryResult
+{
+    float3 position;       // Water-surface position at the requested world XZ.
+    float signedDepth;     // position.y - queryPoint.y; positive means submerged.
+    float3 normal;         // Upward world-space FFT surface normal.
+    float reserved;        // Kept for a naturally aligned 32-byte result and future data.
+};
+
+StructuredBuffer<float3> _QueryPoints;
+RWStructuredBuffer<SurfaceQueryResult> _QueryResults;
+
+Texture2DArray<float4> _OceanDisplacement;
+Texture2DArray<float4> _OceanNormals;
+SamplerState sampler_OceanDisplacement;
+SamplerState sampler_OceanNormals;
+
+int _QueryPointCount;
+int _FFTCascadeCount;
+int _FFTResolution;
+float4 _OceanDomainSizes;
+float _OceanSeaLevel;
+
+float2 CascadeUV(float2 baseXZ, int cascade)
+{
+    // FFT texels represent periodic world-space domains. The half-texel offset matches
+    // OceanSurface.shader and OceanUnderwater.shader.
+    return baseXZ / _OceanDomainSizes[cascade] + 0.5 / _FFTResolution;
+}
+
+float3 SampleCombinedDisplacement(float2 baseXZ)
+{
+    float3 displacement = 0;
+    int cascadeCount = min(max(_FFTCascadeCount, 0), MAX_OCEAN_CASCADES);
+
+    [loop]
+    for (int cascade = 0; cascade < cascadeCount; cascade++)
+    {
+        displacement += _OceanDisplacement.SampleLevel(
+            sampler_OceanDisplacement,
+            float3(CascadeUV(baseXZ, cascade), cascade),
+            0).xyz;
+    }
+    return displacement;
+}
+
+float3 SampleCombinedNormal(float2 baseXZ)
+{
+    float2 slope = 0;
+    int cascadeCount = min(max(_FFTCascadeCount, 0), MAX_OCEAN_CASCADES);
+
+    [loop]
+    for (int cascade = 0; cascade < cascadeCount; cascade++)
+    {
+        float3 cascadeNormal = _OceanNormals.SampleLevel(
+            sampler_OceanNormals,
+            float3(CascadeUV(baseXZ, cascade), cascade),
+            0).xyz;
+
+        // Convert each normal back to a height slope before adding cascades. Directly
+        // averaging normals would progressively flatten the result as cascade count grows.
+        slope += -cascadeNormal.xz / max(cascadeNormal.y, 0.15);
+    }
+
+    return normalize(float3(-slope.x, 1, -slope.y));
+}
+
+float2 InvertHorizontalDisplacement(float2 worldXZ)
+{
+    // The FFT texture is parameterised by the original grid coordinate q, while callers
+    // provide the horizontally displaced coordinate x. Solve q + Dxz(q) = x using the
+    // same fixed-point form used by the rendered-water height query.
+    float2 baseXZ = worldXZ;
+
+    [unroll]
+    for (int iteration = 0; iteration < HORIZONTAL_INVERSION_ITERATIONS; iteration++)
+    {
+        float2 error = baseXZ + SampleCombinedDisplacement(baseXZ).xz - worldXZ;
+        baseXZ -= error;
+    }
+    return baseXZ;
+}
+
+[numthreads(64, 1, 1)]
+void QueryKernel(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint index = dispatchId.x;
+    if (index >= (uint)max(_QueryPointCount, 0)) return;
+
+    float3 queryPoint = _QueryPoints[index];
+    float2 baseXZ = InvertHorizontalDisplacement(queryPoint.xz);
+    float3 displacement = SampleCombinedDisplacement(baseXZ);
+
+    SurfaceQueryResult result;
+    result.position = float3(queryPoint.x, _OceanSeaLevel + displacement.y, queryPoint.z);
+    result.signedDepth = result.position.y - queryPoint.y;
+    result.normal = SampleCombinedNormal(baseXZ);
+    result.reserved = 0;
+    _QueryResults[index] = result;
+}

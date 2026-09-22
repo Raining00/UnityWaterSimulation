@@ -216,6 +216,25 @@ namespace WaterSystem.Ocean
             properties.SetTexture(OceanFFTShaderIDs.Foam, Textures.FoamPrevious);
         }
 
+        public override bool TryGetSurfaceQueryResources(out OceanSurfaceQueryResources resources)
+        {
+            if (!HasOutput || !Textures.IsAllocated)
+            {
+                resources = default;
+                return false;
+            }
+
+            resources = new OceanSurfaceQueryResources(
+                Textures.FFTDisplacement,
+                Textures.FFTNormal,
+                Parameters.DomainSizes,
+                Parameters.CascadeCount,
+                Parameters.Resolution,
+                owner != null ? owner.transform.position.y : transform.position.y,
+                SimulationTime);
+            return resources.IsValid;
+        }
+
         void ReleaseGPU()
         {
             Textures.Dispose();
