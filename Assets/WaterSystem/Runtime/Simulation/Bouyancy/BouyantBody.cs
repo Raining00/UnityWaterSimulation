@@ -14,8 +14,12 @@ namespace WaterSystem.Ocean
         [SerializeField] OceanRenderer ocean;
 
         [Header("Buoyancy sample points")]
-        [Tooltip("Number of candidate voxel centers along the body's local X/Y/Z bounds.")]
+        [Tooltip("Number of coarse water-query voxels along the body's local X/Y/Z bounds.")]
         [SerializeField] Vector3Int samplesPerAxis = new Vector3Int(3, 8, 3);
+        [Tooltip("Geometry subdivisions inside each coarse voxel. Only occupied voxels request GPU water samples.")]
+        [SerializeField] Vector3Int geometrySubdivisions = new Vector3Int(4, 8, 4);
+        [Tooltip("Occupancy tests along each axis of a geometry subcell. Higher values improve curved collider boundaries.")]
+        [SerializeField, Range(1, 3)] int occupancySamplesPerAxis = 2;
         [Tooltip("Allow trigger colliders to contribute to the buoyancy volume.")]
         [SerializeField] bool includeTriggerColliders;
         [Tooltip("World-space tolerance used when checking whether a voxel center is inside a collider.")]
@@ -31,15 +35,36 @@ namespace WaterSystem.Ocean
         [SerializeField, HideInInspector] Bounds localSamplingBounds;
         [SerializeField, HideInInspector] Vector3 localSampleCellSize;
         [ReadOnly(true), SerializeField] float localSampleVolume;
+        [Tooltip("Estimated local-space volume occupied by the colliders; scales with the transform at runtime.")]
+        [ReadOnly(true), SerializeField] float estimatedLocalVolume;
+
+        readonly struct OccupiedSubcell
+        {
+            public readonly Vector3 LocalCenter;
+            public readonly float LocalVolume;
+
+            public OccupiedSubcell(Vector3 localCenter, float localVolume)
+            {
+                LocalCenter = localCenter;
+                LocalVolume = localVolume;
+            }
+        }
 
         Rigidbody _rigidbody;
         Collider[] _colliders = Array.Empty<Collider>();
         OceanSurfaceQueryResult[] latestSurfaceResults = Array.Empty<OceanSurfaceQueryResult>();
-        private float submergedFractions;
+        OccupiedSubcell[] occupiedSubcells = Array.Empty<OccupiedSubcell>();
+        int[] subcellStarts = Array.Empty<int>();
+        int[] subcellCounts = Array.Empty<int>();
+        float[] localVoxelVolumes = Array.Empty<float>();
+        Vector3[] localVoxelCenters = Array.Empty<Vector3>();
+        Vector3 localSubcellSize;
         int queryVersion;
 
         public int SamplePointCount => localSamplePoints?.Length ?? 0;
         public IReadOnlyList<Vector3> LocalSamplePoints => localSamplePoints;
+        public float EstimatedDisplacementVolume =>
+            estimatedLocalVolume * Mathf.Abs(transform.localToWorldMatrix.determinant);
         internal OceanRenderer Ocean => ocean;
         internal int QueryVersion => queryVersion;
         public long LatestSurfaceRequestId { get; private set; } = -1;
@@ -81,6 +106,10 @@ namespace WaterSystem.Ocean
             samplesPerAxis.x = Mathf.Clamp(samplesPerAxis.x, 1, 16);
             samplesPerAxis.y = Mathf.Clamp(samplesPerAxis.y, 1, 16);
             samplesPerAxis.z = Mathf.Clamp(samplesPerAxis.z, 1, 16);
+            geometrySubdivisions.x = Mathf.Clamp(geometrySubdivisions.x, 1, 8);
+            geometrySubdivisions.y = Mathf.Clamp(geometrySubdivisions.y, 1, 12);
+            geometrySubdivisions.z = Mathf.Clamp(geometrySubdivisions.z, 1, 8);
+            occupancySamplesPerAxis = Mathf.Clamp(occupancySamplesPerAxis, 1, 3);
             insideTolerance = Mathf.Max(0.000001f, insideTolerance);
             waterDensity = Mathf.Max(0f, waterDensity);
             waterDrag = Mathf.Max(0f, waterDrag);
@@ -111,42 +140,90 @@ namespace WaterSystem.Ocean
         {
             if (!Application.isPlaying || _rigidbody == null || _rigidbody.isKinematic)
                 return;
-            if (!TryGetSurfaceResults(out var results) || results.Count == 0)
+            if (!TryGetSurfaceResults(out var results) || results.Count == 0 ||
+                subcellStarts.Length != results.Count)
                 return;
 
             Matrix4x4 localToWorld = transform.localToWorldMatrix;
-            float worldSampleVolume = localSampleVolume * Mathf.Abs(localToWorld.determinant);
-            Debug.Log("WorldSampleVolume: " + worldSampleVolume);
+            float volumeScale = Mathf.Abs(localToWorld.determinant);
             Vector3 gravity = Physics.gravity;
-            if (worldSampleVolume <= 0f || waterDensity <= 0f || gravity.sqrMagnitude <= 0f)
+            if (volumeScale <= 0f || waterDensity <= 0f || gravity.sqrMagnitude <= 0f)
                 return;
 
-            // Project the voxel's three transformed edges onto world up. This keeps
-            // partial submersion meaningful for rotated and non-uniformly scaled bodies.
-            float worldSampleHeight =
-                Mathf.Abs(localToWorld.MultiplyVector(new Vector3(localSampleCellSize.x, 0f, 0f)).y) +
-                Mathf.Abs(localToWorld.MultiplyVector(new Vector3(0f, localSampleCellSize.y, 0f)).y) +
-                Mathf.Abs(localToWorld.MultiplyVector(new Vector3(0f, 0f, localSampleCellSize.z)).y);
-            if (worldSampleHeight <= 0f)
-                return;
-            
-            // Bound the damping contribution so it cannot cancel more than the
-            // body's linear momentum in one physics step, even for a light body.
+            Vector3 voxelEdgeX = localToWorld.MultiplyVector(new Vector3(localSampleCellSize.x, 0f, 0f));
+            Vector3 voxelEdgeY = localToWorld.MultiplyVector(new Vector3(0f, localSampleCellSize.y, 0f));
+            Vector3 voxelEdgeZ = localToWorld.MultiplyVector(new Vector3(0f, 0f, localSampleCellSize.z));
+            Vector3 subcellEdgeX = localToWorld.MultiplyVector(new Vector3(localSubcellSize.x, 0f, 0f));
+            Vector3 subcellEdgeY = localToWorld.MultiplyVector(new Vector3(0f, localSubcellSize.y, 0f));
+            Vector3 subcellEdgeZ = localToWorld.MultiplyVector(new Vector3(0f, 0f, localSubcellSize.z));
             float maxDampingPerPoint = _rigidbody.mass /
-                                       (Mathf.Max(Time.fixedDeltaTime, 0.000001f) * results.Count);
+                (Mathf.Max(Time.fixedDeltaTime, 0.000001f) * results.Count);
+
             for (int i = 0; i < results.Count; i++)
             {
-                Vector3 point = localToWorld.MultiplyPoint3x4(localSamplePoints[i]);
-                float depth = results[i].Position.y - point.y;
-                float submergedFraction = Mathf.Clamp01(0.5f + depth / worldSampleHeight);
-                // Archimedes' force: density * submerged volume * -gravity.
-                // ForceMode.Force lets the Rigidbody mass determine acceleration.
-                Vector3 buoyancy = -gravity * (waterDensity * worldSampleVolume * submergedFraction);
+                Vector3 normal = results[i].Normal;
+                if (normal.y <= 0.15f || normal.sqrMagnitude < 0.25f)
+                    normal = Vector3.up;
+                else
+                    normal.Normalize();
+
+                Vector3 surface = results[i].Position;
+                Vector3 voxelCenter = localToWorld.MultiplyPoint3x4(localSamplePoints[i]);
+                Vector3 geometricCenter = localToWorld.MultiplyPoint3x4(localVoxelCenters[i]);
+                float signedDistance = Vector3.Dot(geometricCenter - surface, normal);
+                float voxelHalfThickness = 0.5f * (
+                    Mathf.Abs(Vector3.Dot(normal, voxelEdgeX)) +
+                    Mathf.Abs(Vector3.Dot(normal, voxelEdgeY)) +
+                    Mathf.Abs(Vector3.Dot(normal, voxelEdgeZ)));
+
+                if (signedDistance >= voxelHalfThickness)
+                    continue;
+
+                float submergedLocalVolume;
+                Vector3 buoyancyCenter;
+                if (signedDistance <= -voxelHalfThickness)
+                {
+                    // Entire coarse voxel is below the local water plane. Its occupied
+                    // subcells are already summarized by volume and centroid.
+                    submergedLocalVolume = localVoxelVolumes[i];
+                    buoyancyCenter = voxelCenter;
+                }
+                else
+                {
+                    float subcellHalfThickness = 0.5f * (
+                        Mathf.Abs(Vector3.Dot(normal, subcellEdgeX)) +
+                        Mathf.Abs(Vector3.Dot(normal, subcellEdgeY)) +
+                        Mathf.Abs(Vector3.Dot(normal, subcellEdgeZ)));
+                    if (subcellHalfThickness <= 0.000001f)
+                        continue;
+
+                    submergedLocalVolume = 0f;
+                    Vector3 weightedCenter = Vector3.zero;
+                    int end = subcellStarts[i] + subcellCounts[i];
+                    for (int j = subcellStarts[i]; j < end; j++)
+                    {
+                        OccupiedSubcell subcell = occupiedSubcells[j];
+                        Vector3 center = localToWorld.MultiplyPoint3x4(subcell.LocalCenter);
+                        float subcellDistance = Vector3.Dot(center - surface, normal);
+                        float fraction = Mathf.Clamp01(0.5f -
+                            subcellDistance / (2f * subcellHalfThickness));
+                        float volume = subcell.LocalVolume * fraction;
+                        submergedLocalVolume += volume;
+                        weightedCenter += center * volume;
+                    }
+                    if (submergedLocalVolume <= 0f)
+                        continue;
+                    buoyancyCenter = weightedCenter / submergedLocalVolume;
+                }
+
+                float submergedWorldVolume = submergedLocalVolume * volumeScale;
+                Vector3 buoyancy = -gravity * (waterDensity * submergedWorldVolume);
                 float damping = Mathf.Min(
-                    waterDensity * worldSampleVolume * submergedFraction * waterDrag,
+                    waterDensity * submergedWorldVolume * waterDrag,
                     maxDampingPerPoint);
-                Vector3 waterResistance = -_rigidbody.GetPointVelocity(point) * damping;
-                _rigidbody.AddForceAtPosition(buoyancy + waterResistance, point, ForceMode.Force);
+                Vector3 waterResistance = -_rigidbody.GetPointVelocity(buoyancyCenter) * damping;
+                _rigidbody.AddForceAtPosition(
+                    buoyancy + waterResistance, buoyancyCenter, ForceMode.Force);
             }
         }
 
@@ -161,56 +238,137 @@ namespace WaterSystem.Ocean
             CacheComponents();
             if (_colliders.Length == 0)
             {
-                localSamplePoints = Array.Empty<Vector3>();
                 localSamplingBounds = default;
-                localSampleCellSize = default;
-                localSampleVolume = 0f;
+                ClearGeneratedSamples();
                 return;
             }
 
             if (!TryBuildLocalBounds(out localSamplingBounds))
             {
-                localSamplePoints = Array.Empty<Vector3>();
-                localSampleCellSize = default;
-                localSampleVolume = 0f;
+                ClearGeneratedSamples();
                 return;
             }
 
             int countX = Mathf.Max(1, samplesPerAxis.x);
             int countY = Mathf.Max(1, samplesPerAxis.y);
             int countZ = Mathf.Max(1, samplesPerAxis.z);
+            int subX = Mathf.Clamp(geometrySubdivisions.x, 1, 8);
+            int subY = Mathf.Clamp(geometrySubdivisions.y, 1, 12);
+            int subZ = Mathf.Clamp(geometrySubdivisions.z, 1, 8);
+            int coverage = Mathf.Clamp(occupancySamplesPerAxis, 1, 3);
+            long coverageTests = (long)countX * countY * countZ * subX * subY * subZ *
+                coverage * coverage * coverage;
+            if (coverageTests > 1000000)
+            {
+                Debug.LogWarning("Buoyancy voxel settings exceed one million collider samples; reduce the voxel or geometry resolution.", this);
+                ClearGeneratedSamples();
+                return;
+            }
+
             Vector3 cellSize = new Vector3(
                 localSamplingBounds.size.x / countX,
                 localSamplingBounds.size.y / countY,
                 localSamplingBounds.size.z / countZ);
             localSampleCellSize = cellSize;
             localSampleVolume = cellSize.x * cellSize.y * cellSize.z;
+            localSubcellSize = new Vector3(cellSize.x / subX, cellSize.y / subY, cellSize.z / subZ);
+            float subcellVolume = localSampleVolume / (subX * subY * subZ);
+            float inverseCoverageCount = 1f / (coverage * coverage * coverage);
 
             var points = new List<Vector3>(countX * countY * countZ);
+            var voxelCenters = new List<Vector3>(points.Capacity);
+            var voxelVolumes = new List<float>(points.Capacity);
+            var starts = new List<int>(points.Capacity);
+            var counts = new List<int>(points.Capacity);
+            var subcells = new List<OccupiedSubcell>();
             Vector3 minimum = localSamplingBounds.min;
+            Matrix4x4 localToWorld = transform.localToWorldMatrix;
+            estimatedLocalVolume = 0f;
             for (int z = 0; z < countZ; z++)
             for (int y = 0; y < countY; y++)
             for (int x = 0; x < countX; x++)
             {
-                Vector3 localPoint = minimum + new Vector3(
-                    (x + 0.5f) * cellSize.x,
-                    (y + 0.5f) * cellSize.y,
-                    (z + 0.5f) * cellSize.z);
-                if (IsInsideOwnedCollider(transform.TransformPoint(localPoint))) points.Add(localPoint);
+                Vector3 voxelMinimum = minimum + new Vector3(
+                    x * cellSize.x, y * cellSize.y, z * cellSize.z);
+                int start = subcells.Count;
+                float occupiedVolume = 0f;
+                Vector3 occupiedMoment = Vector3.zero;
+
+                for (int sz = 0; sz < subZ; sz++)
+                for (int sy = 0; sy < subY; sy++)
+                for (int sx = 0; sx < subX; sx++)
+                {
+                    Vector3 subMinimum = voxelMinimum + new Vector3(
+                        sx * localSubcellSize.x,
+                        sy * localSubcellSize.y,
+                        sz * localSubcellSize.z);
+                    int insideCount = 0;
+                    Vector3 insidePositionSum = Vector3.zero;
+                    for (int oz = 0; oz < coverage; oz++)
+                    for (int oy = 0; oy < coverage; oy++)
+                    for (int ox = 0; ox < coverage; ox++)
+                    {
+                        Vector3 localPoint = subMinimum + new Vector3(
+                            (ox + 0.5f) / coverage * localSubcellSize.x,
+                            (oy + 0.5f) / coverage * localSubcellSize.y,
+                            (oz + 0.5f) / coverage * localSubcellSize.z);
+                        if (!IsInsideOwnedCollider(localToWorld.MultiplyPoint3x4(localPoint)))
+                            continue;
+                        insideCount++;
+                        insidePositionSum += localPoint;
+                    }
+
+                    if (insideCount == 0) continue;
+                    float volume = subcellVolume * insideCount * inverseCoverageCount;
+                    Vector3 centroid = insidePositionSum / insideCount;
+                    subcells.Add(new OccupiedSubcell(centroid, volume));
+                    occupiedVolume += volume;
+                    occupiedMoment += centroid * volume;
+                }
+
+                if (occupiedVolume <= 0f) continue;
+                points.Add(occupiedMoment / occupiedVolume);
+                voxelCenters.Add(voxelMinimum + cellSize * 0.5f);
+                voxelVolumes.Add(occupiedVolume);
+                starts.Add(start);
+                counts.Add(subcells.Count - start);
+                estimatedLocalVolume += occupiedVolume;
             }
 
-            // Thin or strongly concave shapes can miss every coarse voxel center. Keep one stable
-            // fallback point so the component remains usable while the resolution is being tuned.
+            // Thin colliders can still miss every occupancy test. Retain one
+            // conservative force point until the user increases the resolution.
             if (points.Count == 0)
             {
                 Vector3 worldPoint = _colliders[0].ClosestPoint(_colliders[0].bounds.center);
-                points.Add(transform.InverseTransformPoint(worldPoint));
-                // The collider may occupy only a thin fraction of this cell. Avoid
-                // assigning the entire voxel volume to the synthetic fallback point.
-                localSampleVolume *= fallbackVolumeFraction;
+                Vector3 localPoint = transform.InverseTransformPoint(worldPoint);
+                float volume = localSampleVolume * fallbackVolumeFraction;
+                points.Add(localPoint);
+                voxelCenters.Add(localPoint);
+                voxelVolumes.Add(volume);
+                starts.Add(subcells.Count);
+                counts.Add(1);
+                subcells.Add(new OccupiedSubcell(localPoint, volume));
+                estimatedLocalVolume = volume;
             }
 
             localSamplePoints = points.ToArray();
+            localVoxelCenters = voxelCenters.ToArray();
+            localVoxelVolumes = voxelVolumes.ToArray();
+            subcellStarts = starts.ToArray();
+            subcellCounts = counts.ToArray();
+            occupiedSubcells = subcells.ToArray();
+        }
+
+        void ClearGeneratedSamples()
+        {
+            localSamplePoints = Array.Empty<Vector3>();
+            localVoxelCenters = Array.Empty<Vector3>();
+            localVoxelVolumes = Array.Empty<float>();
+            subcellStarts = Array.Empty<int>();
+            subcellCounts = Array.Empty<int>();
+            occupiedSubcells = Array.Empty<OccupiedSubcell>();
+            localSampleCellSize = localSubcellSize = default;
+            localSampleVolume = estimatedLocalVolume = 0f;
         }
 
         bool TryBuildLocalBounds(out Bounds bounds)
