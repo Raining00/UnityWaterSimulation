@@ -139,7 +139,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &98866381
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -229,7 +229,7 @@ Transform:
   m_GameObject: {fileID: 98866380}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 60, y: 0.7, z: 145}
+  m_LocalPosition: {x: 60, y: 1.45, z: 145}
   m_LocalScale: {x: 0.7, y: 1.5, z: 0.7}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -248,31 +248,90 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
   ocean: {fileID: 1950571329}
-  samplesPerAxis: {x: 3, y: 2, z: 3}
+  samplesPerAxis: {x: 3, y: 8, z: 3}
   includeTriggerColliders: 0
   insideTolerance: 0.0001
+  waterDensity: 1000
+  waterDrag: 4
+  fallbackVolumeFraction: 0.25
   localSamplePoints:
-  - {x: -0.33333188, y: -0.5, z: -0.33333915}
-  - {x: 0, y: -0.5, z: -0.33333915}
-  - {x: 0.33333182, y: -0.5, z: -0.33333915}
-  - {x: -0.33333188, y: 0.5, z: -0.33333915}
-  - {x: 0, y: 0.5, z: -0.33333915}
-  - {x: 0.33333182, y: 0.5, z: -0.33333915}
-  - {x: -0.33333188, y: -0.5, z: 0}
-  - {x: 0, y: -0.5, z: 0}
-  - {x: 0.33333182, y: -0.5, z: 0}
-  - {x: -0.33333188, y: 0.5, z: 0}
-  - {x: 0, y: 0.5, z: 0}
-  - {x: 0.33333182, y: 0.5, z: 0}
-  - {x: -0.33333188, y: -0.5, z: 0.3333391}
-  - {x: 0, y: -0.5, z: 0.3333391}
-  - {x: 0.33333182, y: -0.5, z: 0.3333391}
-  - {x: -0.33333188, y: 0.5, z: 0.3333391}
-  - {x: 0, y: 0.5, z: 0.3333391}
-  - {x: 0.33333182, y: 0.5, z: 0.3333391}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
   localSamplingBounds:
     m_Center: {x: 0, y: 0, z: 0}
-    m_Extent: {x: 0.4999978, y: 1, z: 0.5000087}
+    m_Extent: {x: 0, y: 0, z: 0}
+  localSampleCellSize: {x: 0, y: 0, z: 0}
+  localSampleVolume: 0
 --- !u!54 &98866386
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -281,7 +340,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 98866380}
   serializedVersion: 5
-  m_Mass: 1
+  m_Mass: 20
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -707,7 +766,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &906977772
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -797,7 +856,7 @@ Transform:
   m_GameObject: {fileID: 906977771}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 45, y: 0.7, z: 90}
+  m_LocalPosition: {x: 45, y: 1.45, z: 90}
   m_LocalScale: {x: 0.7, y: 1.5, z: 0.7}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -816,31 +875,90 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
   ocean: {fileID: 1950571329}
-  samplesPerAxis: {x: 3, y: 2, z: 3}
+  samplesPerAxis: {x: 3, y: 8, z: 3}
   includeTriggerColliders: 0
   insideTolerance: 0.0001
+  waterDensity: 1000
+  waterDrag: 4
+  fallbackVolumeFraction: 0.25
   localSamplePoints:
-  - {x: -0.33333188, y: -0.5, z: -0.33333188}
-  - {x: 0, y: -0.5, z: -0.33333188}
-  - {x: 0.33333182, y: -0.5, z: -0.33333188}
-  - {x: -0.33333188, y: 0.5, z: -0.33333188}
-  - {x: 0, y: 0.5, z: -0.33333188}
-  - {x: 0.33333182, y: 0.5, z: -0.33333188}
-  - {x: -0.33333188, y: -0.5, z: 0}
-  - {x: 0, y: -0.5, z: 0}
-  - {x: 0.33333182, y: -0.5, z: 0}
-  - {x: -0.33333188, y: 0.5, z: 0}
-  - {x: 0, y: 0.5, z: 0}
-  - {x: 0.33333182, y: 0.5, z: 0}
-  - {x: -0.33333188, y: -0.5, z: 0.33333182}
-  - {x: 0, y: -0.5, z: 0.33333182}
-  - {x: 0.33333182, y: -0.5, z: 0.33333182}
-  - {x: -0.33333188, y: 0.5, z: 0.33333182}
-  - {x: 0, y: 0.5, z: 0.33333182}
-  - {x: 0.33333182, y: 0.5, z: 0.33333182}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
   localSamplingBounds:
     m_Center: {x: 0, y: 0, z: 0}
-    m_Extent: {x: 0.4999978, y: 1, z: 0.4999978}
+    m_Extent: {x: 0, y: 0, z: 0}
+  localSampleCellSize: {x: 0, y: 0, z: 0}
+  localSampleVolume: 0
 --- !u!54 &906977777
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -849,7 +967,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 906977771}
   serializedVersion: 5
-  m_Mass: 1
+  m_Mass: 20
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -1090,7 +1208,7 @@ Transform:
   m_GameObject: {fileID: 1016855921}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 30, y: 0.7, z: 35}
+  m_LocalPosition: {x: 30, y: 1.45, z: 35}
   m_LocalScale: {x: 0.7, y: 1.5, z: 0.7}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1109,31 +1227,82 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.BouyantBody
   ocean: {fileID: 1950571329}
-  samplesPerAxis: {x: 3, y: 2, z: 3}
+  samplesPerAxis: {x: 3, y: 8, z: 3}
   includeTriggerColliders: 0
   insideTolerance: 0.0001
+  waterDensity: 1000
+  waterDrag: 4
+  fallbackVolumeFraction: 0.25
   localSamplePoints:
-  - {x: -0.33333367, y: -0.49906886, z: -0.33333188}
-  - {x: 0, y: -0.49906886, z: -0.33333188}
-  - {x: 0.33333373, y: -0.49906886, z: -0.33333188}
-  - {x: -0.33333367, y: 0.5027963, z: -0.33333188}
-  - {x: 0, y: 0.5027963, z: -0.33333188}
-  - {x: 0.33333373, y: 0.5027963, z: -0.33333188}
-  - {x: -0.33333367, y: -0.49906886, z: 0}
-  - {x: 0, y: -0.49906886, z: 0}
-  - {x: 0.33333373, y: -0.49906886, z: 0}
-  - {x: -0.33333367, y: 0.5027963, z: 0}
-  - {x: 0, y: 0.5027963, z: 0}
-  - {x: 0.33333373, y: 0.5027963, z: 0}
-  - {x: -0.33333367, y: -0.49906886, z: 0.33333182}
-  - {x: 0, y: -0.49906886, z: 0.33333182}
-  - {x: 0.33333373, y: -0.49906886, z: 0.33333182}
-  - {x: -0.33333367, y: 0.5027963, z: 0.33333182}
-  - {x: 0, y: 0.5027963, z: 0.33333182}
-  - {x: 0.33333373, y: 0.5027963, z: 0.33333182}
+  - {x: 0, y: -0.87476826, z: -0.33333188}
+  - {x: -0.33333367, y: -0.624302, z: -0.33333188}
+  - {x: 0, y: -0.624302, z: -0.33333188}
+  - {x: 0.33333373, y: -0.624302, z: -0.33333188}
+  - {x: -0.33333367, y: -0.37383568, z: -0.33333188}
+  - {x: 0, y: -0.37383568, z: -0.33333188}
+  - {x: 0.33333373, y: -0.37383568, z: -0.33333188}
+  - {x: -0.33333367, y: -0.123369455, z: -0.33333188}
+  - {x: 0, y: -0.123369455, z: -0.33333188}
+  - {x: 0.33333373, y: -0.123369455, z: -0.33333188}
+  - {x: -0.33333367, y: 0.12709689, z: -0.33333188}
+  - {x: 0, y: 0.12709689, z: -0.33333188}
+  - {x: 0.33333373, y: 0.12709689, z: -0.33333188}
+  - {x: -0.33333367, y: 0.37756312, z: -0.33333188}
+  - {x: 0, y: 0.37756312, z: -0.33333188}
+  - {x: 0.33333373, y: 0.37756312, z: -0.33333188}
+  - {x: -0.33333367, y: 0.62802947, z: -0.33333188}
+  - {x: 0, y: 0.62802947, z: -0.33333188}
+  - {x: 0.33333373, y: 0.62802947, z: -0.33333188}
+  - {x: 0, y: 0.8784957, z: -0.33333188}
+  - {x: -0.33333367, y: -0.87476826, z: 0}
+  - {x: 0, y: -0.87476826, z: 0}
+  - {x: 0.33333373, y: -0.87476826, z: 0}
+  - {x: -0.33333367, y: -0.624302, z: 0}
+  - {x: 0, y: -0.624302, z: 0}
+  - {x: 0.33333373, y: -0.624302, z: 0}
+  - {x: -0.33333367, y: -0.37383568, z: 0}
+  - {x: 0, y: -0.37383568, z: 0}
+  - {x: 0.33333373, y: -0.37383568, z: 0}
+  - {x: -0.33333367, y: -0.123369455, z: 0}
+  - {x: 0, y: -0.123369455, z: 0}
+  - {x: 0.33333373, y: -0.123369455, z: 0}
+  - {x: -0.33333367, y: 0.12709689, z: 0}
+  - {x: 0, y: 0.12709689, z: 0}
+  - {x: 0.33333373, y: 0.12709689, z: 0}
+  - {x: -0.33333367, y: 0.37756312, z: 0}
+  - {x: 0, y: 0.37756312, z: 0}
+  - {x: 0.33333373, y: 0.37756312, z: 0}
+  - {x: -0.33333367, y: 0.62802947, z: 0}
+  - {x: 0, y: 0.62802947, z: 0}
+  - {x: 0.33333373, y: 0.62802947, z: 0}
+  - {x: -0.33333367, y: 0.8784957, z: 0}
+  - {x: 0, y: 0.8784957, z: 0}
+  - {x: 0.33333373, y: 0.8784957, z: 0}
+  - {x: 0, y: -0.87476826, z: 0.33333182}
+  - {x: -0.33333367, y: -0.624302, z: 0.33333182}
+  - {x: 0, y: -0.624302, z: 0.33333182}
+  - {x: 0.33333373, y: -0.624302, z: 0.33333182}
+  - {x: -0.33333367, y: -0.37383568, z: 0.33333182}
+  - {x: 0, y: -0.37383568, z: 0.33333182}
+  - {x: 0.33333373, y: -0.37383568, z: 0.33333182}
+  - {x: -0.33333367, y: -0.123369455, z: 0.33333182}
+  - {x: 0, y: -0.123369455, z: 0.33333182}
+  - {x: 0.33333373, y: -0.123369455, z: 0.33333182}
+  - {x: -0.33333367, y: 0.12709689, z: 0.33333182}
+  - {x: 0, y: 0.12709689, z: 0.33333182}
+  - {x: 0.33333373, y: 0.12709689, z: 0.33333182}
+  - {x: -0.33333367, y: 0.37756312, z: 0.33333182}
+  - {x: 0, y: 0.37756312, z: 0.33333182}
+  - {x: 0.33333373, y: 0.37756312, z: 0.33333182}
+  - {x: -0.33333367, y: 0.62802947, z: 0.33333182}
+  - {x: 0, y: 0.62802947, z: 0.33333182}
+  - {x: 0.33333373, y: 0.62802947, z: 0.33333182}
+  - {x: 0, y: 0.8784957, z: 0.33333182}
   localSamplingBounds:
     m_Center: {x: 0, y: 0.001863718, z: 0}
     m_Extent: {x: 0.50000054, y: 1.0018651, z: 0.4999978}
+  localSampleCellSize: {x: 0.3333337, y: 0.2504663, z: 0.33333185}
+  localSampleVolume: 0.027829494
 --- !u!54 &1016855927
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1142,7 +1311,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1016855921}
   serializedVersion: 5
-  m_Mass: 1
+  m_Mass: 50
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -1156,7 +1325,7 @@ Rigidbody:
     m_Bits: 0
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
-  m_UseGravity: 0
+  m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
   m_Constraints: 0
@@ -1292,7 +1461,7 @@ Transform:
   m_GameObject: {fileID: 1252512605}
   serializedVersion: 2
   m_LocalRotation: {x: 0.029959593, y: 0, z: 0, w: 0.9995511}
-  m_LocalPosition: {x: 0, y: 7, z: -35}
+  m_LocalPosition: {x: 29.6, y: 1.4, z: 29.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

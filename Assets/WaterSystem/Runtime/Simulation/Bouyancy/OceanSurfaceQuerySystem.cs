@@ -1,10 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace WaterSystem.Ocean
 {
+    // Matches SurfaceQuery.compute: float3 + float + float3 + float = 32 bytes.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct OceanSurfaceQueryResult
+    {
+        public Vector3 Position;
+        public float SignedDepth;
+        public Vector3 Normal;
+        public float Reserved;
+    }
+
     /// <summary>
     /// Records batched surface queries after the active ocean simulation has recorded its work.
     /// This component deliberately depends on OceanSurfaceQueryResources instead of FFTCompute.
@@ -13,8 +24,42 @@ namespace WaterSystem.Ocean
     [AddComponentMenu("Water System/Ocean Surface Queries")]
     public sealed class OceanSurfaceQuerySystem : MonoBehaviour
     {
+        const int ResultStride = sizeof(float) * 8;
+        const int MaxInFlight = 3;
+
         OceanRenderer owner;
         readonly HashSet<BouyantBody> activeBodies = new();
+        readonly List<QuerySlot> slots = new(MaxInFlight);
+        int generation;
+        long nextRequestId;
+        bool readbackErrorLogged;
+
+        sealed class QuerySlot
+        {
+            public ComputeBuffer Points;
+            public ComputeBuffer Results;
+            public int Capacity;
+            public int Count;
+            public int Generation;
+            public long RequestId;
+            public double SimulationTime;
+            public bool Busy;
+            public bool Completed;
+            public bool Failed;
+            public bool Retired;
+            public Exception Error;
+            public OceanSurfaceQueryResult[] CpuResults = Array.Empty<OceanSurfaceQueryResult>();
+            public readonly List<BodyQueryRange> Ranges = new();
+            public Action<AsyncGPUReadbackRequest> Callback;
+
+            public void DisposeBuffers()
+            {
+                Points?.Release();
+                Results?.Release();
+                Points = Results = null;
+                Capacity = 0;
+            }
+        }
 
         /// <summary>True after the owning ocean has initialized this service.</summary>
         public bool IsInitialized { get; private set; }
@@ -31,19 +76,17 @@ namespace WaterSystem.Ocean
             public readonly BouyantBody Body;
             public readonly int StartIndex;
             public readonly int Count;
+            public readonly int Version;
 
-            public BodyQueryRange(BouyantBody body, int startIndex, int count)
+            public BodyQueryRange(BouyantBody body, int startIndex, int count, int version)
             {
                 Body = body;
                 StartIndex = startIndex;
                 Count = count;
+                Version = version;
             }
         }
-        readonly Dictionary<BouyantBody, BodyQueryRange> bodyQueryRanges = new();
-        
-        ComputeBuffer deviceQueryPoints;
-        ComputeBuffer deviceQueryResults;
-        int deviceBufferCapacity;
+
         [SerializeField, HideInInspector] private ComputeShader queryShader;
         int queryKernelIndex = -1;
         uint queryThreadGroupSizeX;
@@ -76,6 +119,13 @@ namespace WaterSystem.Ocean
             if (queryThreadGroupSizeX == 0 || sizeY == 0 || sizeZ == 0)
                 throw new InvalidOperationException("SurfaceQuery.compute has an invalid thread-group size.");
             IsInitialized = true;
+
+            // OnEnable may have run before the ocean had a query component, or may not run again
+            // when entering Play Mode with scene/domain reload disabled. Repair registration once
+            // per initialization, rather than searching the scene every simulation frame.
+            activeBodies.RemoveWhere(body => body == null || !body.isActiveAndEnabled || body.Ocean != ocean);
+            foreach (var body in FindObjectsByType<BouyantBody>(FindObjectsInactive.Exclude))
+                if (body.isActiveAndEnabled && body.Ocean == ocean) activeBodies.Add(body);
         }
 
         public void Register(BouyantBody body)
@@ -87,8 +137,9 @@ namespace WaterSystem.Ocean
         {
             if (ReferenceEquals(body, null)) return;
             activeBodies.Remove(body);
-            bodyQueryRanges.Remove(body);
         }
+
+        void Update() => PublishCompleted();
 
         /// <summary>
         /// Appends query commands to the same command buffer as the simulation. Commands recorded
@@ -100,6 +151,7 @@ namespace WaterSystem.Ocean
             in OceanSimulationFrame frame)
         {
             if (commands == null) throw new ArgumentNullException(nameof(commands));
+            PublishCompleted();
             if (!IsInitialized || owner == null || !resources.IsValid) return;
 
             LastRecordedFrame = frame.FrameIndex;
@@ -107,7 +159,6 @@ namespace WaterSystem.Ocean
             // Registration is intentionally independent of point counts: a body may regenerate its
             // samples after registration. Recalculate the exact batch size from the current state.
             activeBodies.RemoveWhere(body => body == null);
-            bodyQueryRanges.Clear();
             int requiredPointCount = 0;
             foreach (var body in activeBodies)
             {
@@ -115,12 +166,17 @@ namespace WaterSystem.Ocean
                 requiredPointCount += body.SamplePointCount;
             }
 
+            QueryPointCount = requiredPointCount;
+            if (requiredPointCount == 0 || !SystemInfo.supportsAsyncGPUReadback) return;
+
+            QuerySlot slot = GetFreeSlot(requiredPointCount);
+            if (slot == null) return; // Keep the last result rather than waiting for the GPU.
+
             if (queryPoints.Length < requiredPointCount)
                 Array.Resize(ref queryPoints, Mathf.NextPowerOfTwo(Mathf.Max(1, requiredPointCount)));
 
             int offset = 0;
-            // TODO: Collect pending positions, bind resources, dispatch the query kernel and enqueue
-            // AsyncGPUReadback. Do not execute or wait for the command buffer from this component.
+            slot.Ranges.Clear();
             foreach (BouyantBody body in activeBodies)
             {
                 if (body == null || body.SamplePointCount == 0 || !body.isActiveAndEnabled) continue;
@@ -128,13 +184,13 @@ namespace WaterSystem.Ocean
                 for (int i = 0; i < body.SamplePointCount; i++)
                     queryPoints[offset + i] = body.GetWorldSamplePoint(i);
                 offset += body.SamplePointCount;
-                bodyQueryRanges.Add(body, new BodyQueryRange(body, startIndex, body.SamplePointCount));
+                slot.Ranges.Add(new BodyQueryRange(body, startIndex, body.SamplePointCount, body.QueryVersion));
             }
             QueryPointCount = offset;
+            // Debug.Log("Total Query Points: " + QueryPointCount);
             if (QueryPointCount == 0) return;
 
-            EnsureDeviceBuffers(QueryPointCount);
-            deviceQueryPoints.SetData(queryPoints, 0, 0, QueryPointCount);
+            slot.Points.SetData(queryPoints, 0, 0, QueryPointCount);
             commands.SetComputeIntParam(queryShader, QueryShaderIDs.QueryPointCount, QueryPointCount);
             commands.SetComputeIntParam(queryShader, QueryShaderIDs.FFTCascadeCount, resources.CascadeCount);
             commands.SetComputeIntParam(queryShader, QueryShaderIDs.FFTResolution, resources.Resolution);
@@ -142,43 +198,122 @@ namespace WaterSystem.Ocean
             commands.SetComputeFloatParam(queryShader, QueryShaderIDs.OceanSeaLevel, resources.SeaLevel);
             commands.SetComputeTextureParam(queryShader, queryKernelIndex, QueryShaderIDs.OceanDisplacement, resources.Displacement);
             commands.SetComputeTextureParam(queryShader, queryKernelIndex, QueryShaderIDs.OceanNormals, resources.Normal);
-            commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryPoints, deviceQueryPoints);
-            commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryResults, deviceQueryResults);
+            commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryPoints, slot.Points);
+            commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryResults, slot.Results);
             commands.DispatchCompute(queryShader, queryKernelIndex,
                 (QueryPointCount + (int)queryThreadGroupSizeX - 1) / (int)queryThreadGroupSizeX, 1, 1);
+
+            slot.Count = QueryPointCount;
+            slot.Generation = generation;
+            slot.RequestId = ++nextRequestId;
+            slot.SimulationTime = resources.SimulationTime;
+            slot.Failed = slot.Completed = false;
+            slot.Error = null;
+            commands.RequestAsyncReadback(slot.Results, QueryPointCount * ResultStride, 0, slot.Callback);
+            slot.Busy = true;
         }
 
-        void EnsureDeviceBuffers(int requiredCount)
+        QuerySlot GetFreeSlot(int requiredCount)
         {
-            if (deviceQueryPoints != null && deviceQueryResults != null && deviceBufferCapacity >= requiredCount) return;
+            QuerySlot slot = null;
+            foreach (var candidate in slots)
+                if (!candidate.Busy) { slot = candidate; break; }
+            if (slot == null && slots.Count < MaxInFlight)
+            {
+                slot = new QuerySlot();
+                QuerySlot captured = slot;
+                slot.Callback = request => OnReadback(captured, request);
+                slots.Add(slot);
+            }
+            if (slot == null) return null;
 
-            ReleaseDeviceBuffers();
-            deviceBufferCapacity = Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount));
-            deviceQueryPoints = new ComputeBuffer(deviceBufferCapacity, sizeof(float) * 3, ComputeBufferType.Structured);
-            deviceQueryResults = new ComputeBuffer(deviceBufferCapacity, sizeof(float) * 8, ComputeBufferType.Structured);
+            if (slot.Points != null && slot.Results != null && slot.Capacity >= requiredCount) return slot;
+            slot.DisposeBuffers();
+            slot.Capacity = Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount));
+            try
+            {
+                slot.Points = new ComputeBuffer(slot.Capacity, sizeof(float) * 3, ComputeBufferType.Structured);
+                slot.Results = new ComputeBuffer(slot.Capacity, ResultStride, ComputeBufferType.Structured);
+                slot.CpuResults = new OceanSurfaceQueryResult[slot.Capacity];
+            }
+            catch { slot.DisposeBuffers(); throw; }
+            return slot;
         }
 
-        void ReleaseDeviceBuffers()
+        void OnReadback(QuerySlot slot, AsyncGPUReadbackRequest request)
         {
-            deviceQueryPoints?.Release();
-            deviceQueryResults?.Release();
-            deviceQueryPoints = null;
-            deviceQueryResults = null;
-            deviceBufferCapacity = 0;
+            if (slot.Retired || slot.Generation != generation)
+            {
+                slot.DisposeBuffers();
+                return;
+            }
+            try
+            {
+                slot.Failed = request.hasError;
+                if (!slot.Failed)
+                {
+                    var data = request.GetData<OceanSurfaceQueryResult>();
+                    if (data.Length < slot.Count) slot.Failed = true;
+                    else for (int i = 0; i < slot.Count; i++) slot.CpuResults[i] = data[i];
+                }
+            }
+            catch (Exception exception)
+            {
+                slot.Failed = true;
+                slot.Error = exception;
+            }
+            slot.Completed = true;
+        }
+
+        void PublishCompleted()
+        {
+            if (!IsInitialized) return;
+            foreach (var slot in slots)
+            {
+                if (!slot.Busy || !slot.Completed) continue;
+                if (slot.Failed && !readbackErrorLogged)
+                {
+                    if (slot.Error != null) Debug.LogException(slot.Error, this);
+                    else Debug.LogWarning("Ocean surface query GPU readback failed; keeping the last valid results.", this);
+                    readbackErrorLogged = true;
+                }
+                if (!slot.Failed && slot.Generation == generation)
+                    foreach (var range in slot.Ranges)
+                    {
+                        var body = range.Body;
+                        if (body == null || !body.isActiveAndEnabled || body.Ocean != owner ||
+                            !activeBodies.Contains(body) || body.QueryVersion != range.Version) continue;
+                        body.AcceptSurfaceResults(slot.CpuResults, range.StartIndex, range.Count,
+                            slot.RequestId, slot.SimulationTime, range.Version);
+                    }
+                slot.Ranges.Clear();
+                slot.Busy = slot.Completed = false;
+                slot.Error = null;
+            }
         }
 
         internal void Release()
         {
-            // TODO: Release buffers and invalidate outstanding async readback generations here.
+            generation++;
+            foreach (var body in activeBodies)
+                if (body != null) body.ClearSurfaceResults();
             owner = null;
             IsInitialized = false;
+            readbackErrorLogged = false;
             LastRecordedFrame = -1;
             QueryPointCount = 0;
-            bodyQueryRanges.Clear();
-            ReleaseDeviceBuffers();
+            foreach (var slot in slots)
+            {
+                slot.Ranges.Clear();
+                if (slot.Busy && !slot.Completed) slot.Retired = true;
+                else slot.DisposeBuffers();
+            }
+            slots.Clear();
             queryShader = null;
             queryKernelIndex = -1;
             queryThreadGroupSizeX = 0;
         }
+
+        void OnDestroy() => Release();
     }
 }
