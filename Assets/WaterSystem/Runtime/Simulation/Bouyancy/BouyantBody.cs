@@ -8,7 +8,7 @@ namespace WaterSystem.Ocean
     [DisallowMultipleComponent, RequireComponent(typeof(Rigidbody))]
     [AddComponentMenu("Water System/Bouyant Body")]
     [ExecuteAlways]
-    public sealed class BouyantBody : MonoBehaviour
+    public sealed class BouyantBody : MonoBehaviour, IOceanSurfaceQueryClient
     {
         // For now directly resign which ocean this object belongs to in Unity Editor. This finally need to calculate which ocean this object belongs to by calculating.
         [SerializeField] OceanRenderer ocean;
@@ -67,6 +67,9 @@ namespace WaterSystem.Ocean
             estimatedLocalVolume * Mathf.Abs(transform.localToWorldMatrix.determinant);
         internal OceanRenderer Ocean => ocean;
         internal int QueryVersion => queryVersion;
+        MonoBehaviour IOceanSurfaceQueryClient.QueryBehaviour => this;
+        OceanRenderer IOceanSurfaceQueryClient.Ocean => ocean;
+        int IOceanSurfaceQueryClient.QueryVersion => queryVersion;
         public long LatestSurfaceRequestId { get; private set; } = -1;
         public double LatestSurfaceSimulationTime { get; private set; }
 
@@ -89,6 +92,10 @@ namespace WaterSystem.Ocean
             LatestSurfaceSimulationTime = simulationTime;
         }
 
+        void IOceanSurfaceQueryClient.AcceptSurfaceResults(OceanSurfaceQueryResult[] source,
+            int start, int count, long requestId, double simulationTime, int expectedVersion) =>
+            AcceptSurfaceResults(source, start, count, requestId, simulationTime, expectedVersion);
+
         void InvalidateSurfaceResults()
         {
             unchecked { queryVersion++; }
@@ -98,6 +105,7 @@ namespace WaterSystem.Ocean
         }
 
         internal void ClearSurfaceResults() => InvalidateSurfaceResults();
+        void IOceanSurfaceQueryClient.ClearSurfaceResults() => ClearSurfaceResults();
 
         void Reset() => GenerateSamplePoints();
 

@@ -28,7 +28,7 @@ namespace WaterSystem.Ocean
         const int MaxInFlight = 3;
 
         OceanRenderer owner;
-        readonly HashSet<BouyantBody> activeBodies = new();
+        readonly HashSet<IOceanSurfaceQueryClient> activeBodies = new();
         readonly List<QuerySlot> slots = new(MaxInFlight);
         int generation;
         long nextRequestId;
@@ -71,14 +71,14 @@ namespace WaterSystem.Ocean
         
         public int QueryPointCount { get; private set; }
 
-        public readonly struct BodyQueryRange
+        internal readonly struct BodyQueryRange
         {
-            public readonly BouyantBody Body;
+            public readonly IOceanSurfaceQueryClient Body;
             public readonly int StartIndex;
             public readonly int Count;
             public readonly int Version;
 
-            public BodyQueryRange(BouyantBody body, int startIndex, int count, int version)
+            public BodyQueryRange(IOceanSurfaceQueryClient body, int startIndex, int count, int version)
             {
                 Body = body;
                 StartIndex = startIndex;
@@ -123,17 +123,19 @@ namespace WaterSystem.Ocean
             // OnEnable may have run before the ocean had a query component, or may not run again
             // when entering Play Mode with scene/domain reload disabled. Repair registration once
             // per initialization, rather than searching the scene every simulation frame.
-            activeBodies.RemoveWhere(body => body == null || !body.isActiveAndEnabled || body.Ocean != ocean);
-            foreach (var body in FindObjectsByType<BouyantBody>(FindObjectsInactive.Exclude))
-                if (body.isActiveAndEnabled && body.Ocean == ocean) activeBodies.Add(body);
+            activeBodies.RemoveWhere(body => body == null || body.QueryBehaviour == null ||
+                !body.QueryBehaviour.isActiveAndEnabled || body.Ocean != ocean);
+            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude))
+                if (behaviour is IOceanSurfaceQueryClient body && body.Ocean == ocean)
+                    activeBodies.Add(body);
         }
 
-        public void Register(BouyantBody body)
+        internal void Register(IOceanSurfaceQueryClient body)
         {
             if (body != null) activeBodies.Add(body);
         }
 
-        public void Unregister(BouyantBody body)
+        internal void Unregister(IOceanSurfaceQueryClient body)
         {
             if (ReferenceEquals(body, null)) return;
             activeBodies.Remove(body);
@@ -158,11 +160,11 @@ namespace WaterSystem.Ocean
 
             // Registration is intentionally independent of point counts: a body may regenerate its
             // samples after registration. Recalculate the exact batch size from the current state.
-            activeBodies.RemoveWhere(body => body == null);
+            activeBodies.RemoveWhere(body => body == null || body.QueryBehaviour == null);
             int requiredPointCount = 0;
             foreach (var body in activeBodies)
             {
-                if (!body.isActiveAndEnabled) continue;
+                if (!body.QueryBehaviour.isActiveAndEnabled || body.Ocean != owner) continue;
                 requiredPointCount += body.SamplePointCount;
             }
 
@@ -177,9 +179,10 @@ namespace WaterSystem.Ocean
 
             int offset = 0;
             slot.Ranges.Clear();
-            foreach (BouyantBody body in activeBodies)
+            foreach (IOceanSurfaceQueryClient body in activeBodies)
             {
-                if (body == null || body.SamplePointCount == 0 || !body.isActiveAndEnabled) continue;
+                if (body == null || body.QueryBehaviour == null || body.SamplePointCount == 0 ||
+                    !body.QueryBehaviour.isActiveAndEnabled || body.Ocean != owner) continue;
                 int startIndex = offset;
                 for (int i = 0; i < body.SamplePointCount; i++)
                     queryPoints[offset + i] = body.GetWorldSamplePoint(i);
@@ -281,7 +284,8 @@ namespace WaterSystem.Ocean
                     foreach (var range in slot.Ranges)
                     {
                         var body = range.Body;
-                        if (body == null || !body.isActiveAndEnabled || body.Ocean != owner ||
+                        if (body == null || body.QueryBehaviour == null ||
+                            !body.QueryBehaviour.isActiveAndEnabled || body.Ocean != owner ||
                             !activeBodies.Contains(body) || body.QueryVersion != range.Version) continue;
                         body.AcceptSurfaceResults(slot.CpuResults, range.StartIndex, range.Count,
                             slot.RequestId, slot.SimulationTime, range.Version);
@@ -296,7 +300,7 @@ namespace WaterSystem.Ocean
         {
             generation++;
             foreach (var body in activeBodies)
-                if (body != null) body.ClearSurfaceResults();
+                if (body != null && body.QueryBehaviour != null) body.ClearSurfaceResults();
             owner = null;
             IsInitialized = false;
             readbackErrorLogged = false;

@@ -1,0 +1,6 @@
+{
+  "name": "WaterSystem.Ocean.BoatInput",
+  "rootNamespace": "WaterSystem.Ocean",
+  "references": ["WaterSystem.Ocean", "Unity.InputSystem"],
+  "autoReferenced": true
+}
