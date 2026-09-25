@@ -22,6 +22,7 @@ namespace WaterSystem.Ocean.Editor
             resources.UnderwaterDepthCopyShader = Shader.Find("Hidden/Universal Render Pipeline/CopyDepth");
             resources.SurfaceShader=Shader.Find("WaterSystem/Ocean");
             resources.StylizedSurfaceShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/WaterSystem/Shaders/OceanStylized.shader");
+            resources.StylizedUnderwaterShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/WaterSystem/Shaders/OceanStylizedUnderwater.shader");
             resources.StylizedNormal = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/SmoothWaves.png");
             resources.StylizedFoam = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/FoamSea.png");
             resources.StylizedIntersection = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/IntersectionNoise.png");

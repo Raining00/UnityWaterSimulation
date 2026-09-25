@@ -8,6 +8,8 @@ namespace WaterSystem.Ocean
         public Shader SurfaceShader;
         public Shader UnderwaterShader, UnderwaterDepthCopyShader;
         public Shader StylizedSurfaceShader;
+        // The stylized volume pass is its own shader; it reuses the physical depth-copy shader.
+        public Shader StylizedUnderwaterShader;
         public Texture2D StylizedNormal, StylizedFoam, StylizedIntersection, StylizedCaustic, StylizedSky;
         public ComputeShader FFT, SurfaceQuery;
         public Texture2D Foam, Caustic;

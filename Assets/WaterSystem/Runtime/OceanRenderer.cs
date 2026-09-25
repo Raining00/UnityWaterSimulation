@@ -26,6 +26,8 @@ namespace WaterSystem.Ocean
         public OceanStylizedSettings Stylized = new OceanStylizedSettings();
         public OceanRenderSettings Rendering = new OceanRenderSettings();
         public OceanUnderwaterSettings Underwater = new OceanUnderwaterSettings();
+        // Stylized mode has its own volume pass and palette, so it does not share Underwater above.
+        public OceanStylizedUnderwaterSettings StylizedUnderwater = new OceanStylizedUnderwaterSettings();
         [SerializeField, HideInInspector, FormerlySerializedAs("SurfaceMaterial")] Material legacySurfaceMaterial;
         public bool PreviewSimulation = true;
         [Header("Horizon")]
@@ -70,8 +72,12 @@ namespace WaterSystem.Ocean
                 : camera.nearClipPlane * (1 + Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * Mathf.Sqrt(1 + camera.aspect * camera.aspect));
             foreach (var value in activeOceans)
             {
-                if (value == null || !value.isActiveAndEnabled || value.ShadingMode != OceanShadingMode.Physical ||
-                    value.Underwater == null || !value.Underwater.Enabled || (camera.cullingMask & (1 << value.gameObject.layer)) == 0) continue;
+                if (value == null || !value.isActiveAndEnabled || (camera.cullingMask & (1 << value.gameObject.layer)) == 0) continue;
+                // Each shading mode owns its own underwater toggle, so the pass only runs for the one in use.
+                bool underwaterOn = value.ShadingMode == OceanShadingMode.Stylized
+                    ? value.StylizedUnderwater != null && value.StylizedUnderwater.Enabled
+                    : value.Underwater != null && value.Underwater.Enabled;
+                if (!underwaterOn) continue;
                 if (camera.cameraType == CameraType.SceneView ? !value.ShowInSceneView : value.TargetCamera != null && value.TargetCamera != camera) continue;
                 float margin = Mathf.Max(value.DisplacementPadding.y, value.Waves.maximumDisplacement.y) + nearRadius;
                 if (camera.transform.position.y > value.transform.position.y + margin) continue;
@@ -113,6 +119,25 @@ namespace WaterSystem.Ocean
             properties.SetColor("_UnderwaterSun", light);
             // The shaft march normalises this, so it must never be the zero vector. Without an active
             // sun the beams simply fall back to straight overhead.
+            Vector3 toSun = sunActive ? -sun.transform.forward : Vector3.up;
+            properties.SetVector("_UnderwaterSunDirection", new Vector4(toSun.x, toSun.y, toSun.z, 0));
+        }
+
+        // The stylized volume pass shares the geometry and light inputs above but has its own palette,
+        // so it binds through OceanStylizedUnderwaterSettings instead of the physical settings block.
+        internal void BindStylizedUnderwater(MaterialPropertyBlock properties, Camera camera)
+        {
+            var center = CameraCenter(camera);
+            properties.SetVector(OriginId, new Vector4(center.x,center.y,center.z,RootSize));
+            properties.SetFloat("_OceanInfinite", InfiniteHorizon ? 1 : 0);
+            properties.SetInt("_OceanSimulationReady", 0);
+            if (activeSimulation != null && !simulationFailed) activeSimulation.BindResources(properties, camera);
+            StylizedUnderwater.Bind(properties, Stylized, OceanResources.Load());
+            properties.SetFloat("_UnderwaterTime", (float)Time.timeAsDouble);
+            var sun = RenderSettings.sun;
+            bool sunActive = sun != null && sun.isActiveAndEnabled;
+            Color light = sunActive ? sun.color.linear * sun.intensity * Mathf.Clamp01(-sun.transform.forward.y) : Color.gray;
+            properties.SetColor("_UnderwaterSun", light);
             Vector3 toSun = sunActive ? -sun.transform.forward : Vector3.up;
             properties.SetVector("_UnderwaterSunDirection", new Vector4(toSun.x, toSun.y, toSun.z, 0));
         }
@@ -167,6 +192,7 @@ namespace WaterSystem.Ocean
             Rendering ??= new OceanRenderSettings();
             Stylized ??= new OceanStylizedSettings();
             Underwater ??= new OceanUnderwaterSettings();
+            StylizedUnderwater ??= new OceanStylizedUnderwaterSettings();
             if(legacySurfaceMaterial!=null)
             {
                 Rendering.ImportLegacy(legacySurfaceMaterial);

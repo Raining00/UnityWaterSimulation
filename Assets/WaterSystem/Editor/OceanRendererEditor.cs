@@ -10,10 +10,18 @@ namespace WaterSystem.Ocean.Editor
         {
             serializedObject.Update();
             var mode = serializedObject.FindProperty("ShadingMode");
-            DrawPropertiesExcluding(serializedObject, "Rendering", "Stylized", "Underwater");
-            EditorGUILayout.PropertyField(serializedObject.FindProperty(mode.enumValueIndex == (int)OceanShadingMode.Stylized ? "Stylized" : "Rendering"), true);
+            DrawPropertiesExcluding(serializedObject, "Rendering", "Stylized", "Underwater", "StylizedUnderwater");
+            // Each mode pairs its surface settings with its own underwater volume pass.
             if (mode.enumValueIndex == (int)OceanShadingMode.Physical)
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("Rendering"), true);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("Underwater"), true);
+            }
+            else
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("Stylized"), true);
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("StylizedUnderwater"), true);
+            }
             serializedObject.ApplyModifiedProperties();
             var ocean = (OceanRenderer)target;
             EditorGUILayout.Space();

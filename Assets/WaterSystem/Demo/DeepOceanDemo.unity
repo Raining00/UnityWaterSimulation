@@ -489,6 +489,63 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1001 &313456430
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 33.51
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 35.12
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4897700035542971025, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_Name
+      value: SectionBoat
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
 --- !u!1 &458639857
 GameObject:
   m_ObjectHideFlags: 0
@@ -1891,6 +1948,28 @@ MonoBehaviour:
     ShaftDepthAbsorption: 0.35
     ShaftSteps: 12
     ShaftDrift: {x: 0.6, y: 0.35}
+  StylizedUnderwater:
+    Enabled: 1
+    FogDensity: 0.09
+    FogStartDistance: 0
+    MaximumDistance: 120
+    FogBrightness: 0.85
+    DeepFogStart: 10
+    DeepFogDensity: 0.035
+    DeepFogBrightness: 0.55
+    WaterlineColor: {r: 0.62, g: 0.94, b: 0.96, a: 1}
+    WaterlineStrength: 0.35
+    WaterlineSoftness: 0.025
+    DistortionStrength: 0.008
+    DistortionScale: 0.025
+    DistortionSpeed: 0.12
+    DistortionDistance: 18
+    CausticStrength: 0.9
+    CausticDepth: 20
+    CausticAnimationSpeed: 0.91
+    ShaftStrength: 0.05
+    ShaftPatternScale: 0.407
+    ShaftMaximumDistance: 31.1
   legacySurfaceMaterial: {fileID: 0}
   PreviewSimulation: 1
   InfiniteHorizon: 1
@@ -1939,3 +2018,4 @@ SceneRoots:
   - {fileID: 906977775}
   - {fileID: 98866384}
   - {fileID: 458639858}
+  - {fileID: 313456430}

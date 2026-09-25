@@ -30,6 +30,7 @@ namespace WaterSystem.Ocean
         sealed class UnderwaterPass : ScriptableRenderPass
         {
             Material material;
+            Shader materialShader;
             CopyDepthPass copyDepth;
             OceanRenderer ocean;
             public UnderwaterPass()
@@ -41,11 +42,17 @@ namespace WaterSystem.Ocean
             public bool Setup(OceanRenderer value)
             {
                 ocean = value;
-                if (material != null) return true;
                 var resources = OceanResources.Load();
-                if (resources.UnderwaterShader == null || resources.UnderwaterDepthCopyShader == null) return false;
-                material = CoreUtils.CreateEngineMaterial(resources.UnderwaterShader);
-                copyDepth = new CopyDepthPass(renderPassEvent, resources.UnderwaterDepthCopyShader, customPassName: "Ocean / resolve depth after water");
+                // Physical and stylized each own a volume shader; both resolve depth the same way.
+                Shader shader = value.ShadingMode == OceanShadingMode.Stylized
+                    ? resources.StylizedUnderwaterShader : resources.UnderwaterShader;
+                if (shader == null || resources.UnderwaterDepthCopyShader == null) return false;
+                // Switching shading mode swaps the volume shader, so key the cache on the shader too.
+                if (material != null && materialShader == shader) return true;
+                CoreUtils.Destroy(material);
+                material = CoreUtils.CreateEngineMaterial(shader);
+                materialShader = shader;
+                copyDepth ??= new CopyDepthPass(renderPassEvent, resources.UnderwaterDepthCopyShader, customPassName: "Ocean / resolve depth after water");
                 return true;
             }
             sealed class PassData
@@ -82,7 +89,8 @@ namespace WaterSystem.Ocean
                 {
                     data.Material = material;
                     data.Properties = new MaterialPropertyBlock();
-                    ocean.BindUnderwater(data.Properties, camera.camera);
+                    if (ocean.ShadingMode == OceanShadingMode.Stylized) ocean.BindStylizedUnderwater(data.Properties, camera.camera);
+                    else ocean.BindUnderwater(data.Properties, camera.camera);
                     data.Source = source; data.Depth = depth; data.Destination = destination;
                     builder.UseTexture(source);
                     builder.UseTexture(depth);
@@ -100,7 +108,7 @@ namespace WaterSystem.Ocean
                 }
                 resources.cameraColor = destination;
             }
-            public void Dispose() { CoreUtils.Destroy(material); material = null; copyDepth?.Dispose(); copyDepth = null; }
+            public void Dispose() { CoreUtils.Destroy(material); material = null; materialShader = null; copyDepth?.Dispose(); copyDepth = null; }
         }
     }
 }

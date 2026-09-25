@@ -16,6 +16,7 @@ MonoBehaviour:
   UnderwaterShader: {fileID: 4800000, guid: 9136579c0f74b9f4fb4686d7e4eff848, type: 3}
   UnderwaterDepthCopyShader: {fileID: 4800000, guid: d6dae50ee9e1bfa4db75f19f99355220, type: 3}
   StylizedSurfaceShader: {fileID: 4800000, guid: 323b89aafaafd1746bbb3aade3d466c8, type: 3}
+  StylizedUnderwaterShader: {fileID: 4800000, guid: 4fa5a969fb414f669b679742ee301067, type: 3}
   StylizedNormal: {fileID: 2800000, guid: 3728b594f32a4fd9a3ec5234b7ae47ac, type: 3}
   StylizedFoam: {fileID: 2800000, guid: 1047c412880f47e5bb5cc8e3a77312e6, type: 3}
   StylizedIntersection: {fileID: 2800000, guid: 2c04e4e556034855a9b3c1af052b5e40, type: 3}
