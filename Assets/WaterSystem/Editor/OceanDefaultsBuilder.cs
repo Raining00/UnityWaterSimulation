@@ -30,6 +30,7 @@ namespace WaterSystem.Ocean.Editor
             resources.StylizedSky = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Stylized/CloudSky.png");
             resources.FFT=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/WaterSystem/Shaders/OceanFFT.compute");
             resources.SurfaceQuery=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/WaterSystem/Shaders/SurfaceQuery.compute");
+            resources.WakeDeposit=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/WaterSystem/Shaders/WakeDeposit.compute");
             resources.Foam=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/FluidsFoamTex.png");
             resources.Caustic=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/WaterSystem/Textures/Caustic_000.png");
             var variants=AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(folder+"/OceanVariants.shadervariants");

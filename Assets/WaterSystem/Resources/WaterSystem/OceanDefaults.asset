@@ -24,6 +24,7 @@ MonoBehaviour:
   StylizedSky: {fileID: 2800000, guid: fd046d5539bc44ada19d85c2ca44e663, type: 3}
   FFT: {fileID: 7200000, guid: 215670438403bbc4f85978e368ae2ad8, type: 3}
   SurfaceQuery: {fileID: 7200000, guid: 71d1bd711adc57f4da4432c8091ae1d0, type: 3}
+  WakeDeposit: {fileID: 7200000, guid: 5bf0b891c64d4211a705131d25f50fa6, type: 3}
   Foam: {fileID: 2800000, guid: dd539d6ad49bf3f4dbc540d170fffbb2, type: 3}
   Caustic: {fileID: 2800000, guid: 42926c5f243ad0a459f0278d26261802, type: 3}
   Variants: {fileID: 20000000, guid: aa08ea7853773b448b754e99c1951788, type: 2}

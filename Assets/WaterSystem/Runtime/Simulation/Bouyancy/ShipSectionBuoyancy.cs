@@ -35,6 +35,9 @@ namespace WaterSystem.Ocean
         long latestRequestId = -1;
 
         public int SamplePointCount => stations.Length * 2;
+        public int WakeSectionCount => stations.Length;
+        public float WakeBowZ => stations.Length == 0 ? 2.65f : stations[stations.Length - 1].z;
+        public float WakeSternZ => stations.Length == 0 ? -2.65f : stations[0].z;
         public float CurrentSubmergedVolume { get; private set; }
         MonoBehaviour IOceanSurfaceQueryClient.QueryBehaviour => this;
         OceanRenderer IOceanSurfaceQueryClient.Ocean => ocean;
@@ -60,7 +63,7 @@ namespace WaterSystem.Ocean
 
         void OnDisable()
         {
-            ocean?.SurfaceQueries?.Unregister(this);
+            if (ocean != null) ocean.SurfaceQueries?.Unregister(this);
             ClearSurfaceResults();
         }
 
@@ -114,6 +117,19 @@ namespace WaterSystem.Ocean
             if ((uint)station >= (uint)stations.Length) throw new ArgumentOutOfRangeException(nameof(index));
             float x = (index & 1) == 0 ? -halfBeams[station] : halfBeams[station];
             return transform.TransformPoint(new Vector3(x, 0, stations[station].z));
+        }
+
+        public float GetWakeHalfBeam(int sectionIndex)
+        {
+            if ((uint)sectionIndex >= (uint)halfBeams.Length) return 0;
+            return halfBeams[sectionIndex];
+        }
+
+        public Vector3 GetWakeSectionPoint(int sectionIndex, int side)
+        {
+            if ((uint)sectionIndex >= (uint)stations.Length) return transform.position;
+            float x = Mathf.Sign(side == 0 ? 1 : side) * halfBeams[sectionIndex];
+            return transform.TransformPoint(new Vector3(x, 0, stations[sectionIndex].z));
         }
 
         void IOceanSurfaceQueryClient.AcceptSurfaceResults(OceanSurfaceQueryResult[] source,

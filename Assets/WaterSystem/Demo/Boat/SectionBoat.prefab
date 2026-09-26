@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 2955112941191135905}
   - component: {fileID: 2458148399084861163}
   - component: {fileID: 7189065737255340234}
+  - component: {fileID: 8361786431320571198}
   m_Layer: 0
   m_Name: SectionBoat
   m_TagString: Untagged
@@ -73,7 +74,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dca98b43ba737c44cb29260d64c818fc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.ShipSectionBuoyancy
   ocean: {fileID: 0}
   hullSections: {fileID: 4900000, guid: e538b06b4e3bc424b9722d78dd2664a4, type: 3}
@@ -125,6 +126,26 @@ MonoBehaviour:
   useKeyboard: 1
   useGamepad: 1
   gamepadDeadZone: 0.15
+--- !u!114 &8361786431320571198
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4897700035542971025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9948a84ebef845b18e30d463610a8d8b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.ShipWakeEmitter
+  SideFoamScale: 0.72
+  BowFoamScale: 1.1
+  SternFoamScale: 1.2
+  ForwardSpeedReference: 4.8
+  SideRadius: 0.7
+  BowRadius: 1.15
+  SternRadius: 1.1
+  MinimumSubmergedVolume: 0.1
 --- !u!1001 &5963731058237377713
 PrefabInstance:
   m_ObjectHideFlags: 0

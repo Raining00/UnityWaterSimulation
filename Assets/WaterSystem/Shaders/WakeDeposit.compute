@@ -1,0 +1,46 @@
+#pragma kernel UpdateWake
+
+struct WakeSplat
+{
+    float2 center;
+    float radius;
+    float strength;
+};
+
+Texture2D<float> _PreviousWake;
+SamplerState sampler_LinearClamp;
+RWTexture2D<float> _WakeResult;
+StructuredBuffer<WakeSplat> _WakeSplats;
+int _WakeSplatCount;
+float _WakeDeltaTime;
+float _WakeDecay;
+float _WakeSize;
+float2 _PreviousWakeOrigin;
+float2 _WakeOrigin;
+
+[numthreads(8, 8, 1)]
+void UpdateWake(uint3 id : SV_DispatchThreadID)
+{
+    uint width, height;
+    _WakeResult.GetDimensions(width, height);
+    if (id.x >= width || id.y >= height) return;
+
+    float2 uv = (float2(id.xy) + 0.5) / float2(width, height);
+    float2 worldXZ = _WakeOrigin + uv * _WakeSize;
+    float2 oldUV = (worldXZ - _PreviousWakeOrigin) / _WakeSize;
+    float foam = 0;
+    if (all(oldUV >= 0) && all(oldUV <= 1))
+        foam = _PreviousWake.SampleLevel(sampler_LinearClamp, oldUV, 0);
+    foam *= exp(-max(0, _WakeDecay) * max(0, _WakeDeltaTime));
+
+    [loop]
+    for (int i = 0; i < _WakeSplatCount; i++)
+    {
+        WakeSplat splat = _WakeSplats[i];
+        float radius = max(0.05, splat.radius);
+        float distance01 = length(worldXZ - splat.center) / radius;
+        float shape = saturate(1 - distance01);
+        foam += max(0, splat.strength) * shape * shape * _WakeDeltaTime * 0.35;
+    }
+    _WakeResult[id.xy] = saturate(foam);
+}

@@ -8,6 +8,7 @@ namespace WaterSystem.Ocean
 {
     [ExecuteAlways, DisallowMultipleComponent]
     [RequireComponent(typeof(OceanSettings), typeof(FFTCompute), typeof(OceanSurfaceQuerySystem))]
+    [RequireComponent(typeof(OceanWakeSystem))]
     [AddComponentMenu("Water System/Ocean")]
     public sealed class OceanRenderer : MonoBehaviour
     {
@@ -164,6 +165,7 @@ namespace WaterSystem.Ocean
         int geometryHash;
         OceanSimulationProvider activeSimulation;
         OceanSurfaceQuerySystem surfaceQuerySystem;
+        OceanWakeSystem wakeSystem;
         CommandBuffer simulationCommands;
         int simulatedFrame = -1;
         double previousTime;
@@ -187,6 +189,8 @@ namespace WaterSystem.Ocean
             if(fft==null)fft=gameObject.AddComponent<FFTCompute>();
             surfaceQuerySystem=GetComponent<OceanSurfaceQuerySystem>();
             if(surfaceQuerySystem==null)surfaceQuerySystem=gameObject.AddComponent<OceanSurfaceQuerySystem>();
+            wakeSystem=GetComponent<OceanWakeSystem>();
+            if(wakeSystem==null)wakeSystem=gameObject.AddComponent<OceanWakeSystem>();
             Simulation=fft;
             fft.RunInEditMode=PreviewSimulation;
             Rendering ??= new OceanRenderSettings();
@@ -324,6 +328,7 @@ namespace WaterSystem.Ocean
                 try { activeSimulation.BindResources(state.Properties, camera); }
                 catch (Exception exception) { FailSimulation(exception); }
             }
+            wakeSystem?.Bind(state.Properties);
             for (int i = 0; i < 16; i++)
                 LastDrawCount += state.Batches[i].Draw(meshes[i], runtimeMaterial, state.Properties, camera, gameObject.layer, ReceiveShadows);
             if(InfiniteHorizon)
@@ -375,6 +380,9 @@ namespace WaterSystem.Ocean
                 simulationCommands.Clear();
                 var frame = new OceanSimulationFrame(now, delta, simulatedFrame);
                 activeSimulation.RecordSimulation(simulationCommands, in frame);
+
+                // One world-space foam update per frame, after FFT production and before any camera draw.
+                wakeSystem?.RecordUpdate(simulationCommands, delta);
 
                 // Query work is appended after simulation work to the same command buffer. The
                 // query system receives a narrow immutable resource view, never the FFT component.

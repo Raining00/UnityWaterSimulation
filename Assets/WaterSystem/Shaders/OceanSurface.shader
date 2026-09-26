@@ -52,11 +52,13 @@ Shader "WaterSystem/Ocean"
             TEXTURE2D_ARRAY(_OceanDisplacement); SAMPLER(sampler_OceanDisplacement);
             TEXTURE2D_ARRAY(_OceanNormals); SAMPLER(sampler_OceanNormals);
             TEXTURE2D_ARRAY(_OceanFoam); SAMPLER(sampler_OceanFoam);
+            TEXTURE2D(_OceanWakeFoam); SAMPLER(sampler_OceanWakeFoam);
             TEXTURE2D(_FoamTex); SAMPLER(sampler_FoamTex);
             TEXTURE2D(_CausticTex); SAMPLER(sampler_CausticTex);
             // Per-ocean values are supplied by MaterialPropertyBlock, not shared global shader state.
             int _OceanSimulationReady, _FFTCascadeCount, _FFTResolution;
             float4 _OceanDomainSizes, _OceanOrigin;
+            float4 _OceanWakeOriginSize;
             float _OceanSimulationTime;
             float _OceanInfinite, _OceanHorizonExtent;
             CBUFFER_START(UnityPerMaterial)
@@ -212,6 +214,14 @@ Shader "WaterSystem/Ocean"
                         float f = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,uv,i,0).r;
                         foam = 1-(1-foam)*(1-f);
                     }
+                }
+                if (_OceanWakeOriginSize.z > 0.0)
+                {
+                    float2 wakeUV = (baseXZ - _OceanWakeOriginSize.xy) * _OceanWakeOriginSize.w;
+                    float edge = min(min(wakeUV.x, wakeUV.y), min(1.0 - wakeUV.x, 1.0 - wakeUV.y));
+                    float wake = SAMPLE_TEXTURE2D_LOD(_OceanWakeFoam, sampler_OceanWakeFoam, wakeUV, 0).r;
+                    wake *= smoothstep(0.0, 0.035, edge);
+                    foam = 1.0 - (1.0 - foam) * (1.0 - wake);
                 }
                 slope*=waveWeight;foam*=waveWeight;
                 float3 n = normalize(float3(-slope.x*_NormalStrength,1,-slope.y*_NormalStrength));
