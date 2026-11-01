@@ -255,16 +255,15 @@ Shader "WaterSystem/Ocean"
                 float sunlight = sun.shadowAttenuation * sun.distanceAttenuation;
                 float3 moonDirection = OceanMoonDirection();
                 float3 moonLight = OceanMoonLight(night);
-                // bool atmosphereActive = AtmosphereEnabled() && _AtmosphereSkyReflectionParams.x > 0;
-                // if (atmosphereActive)
-                //     sunlight *= smoothstep(-0.02, 0.05, _AtmosphereSun.y);
-                // else
-                sunlight *= lerp(1.0,smoothstep(-0.02,0.05,sun.direction.y),night);
+                bool atmosphereActive = AtmosphereEnabled() && _AtmosphereSkyReflectionParams.x > 0;
+                if (atmosphereActive)
+                    sunlight *= smoothstep(-0.02, 0.05, _AtmosphereSun.y);
+                else
+                    sunlight *= lerp(1.0,smoothstep(-0.02,0.05,sun.direction.y),night);
                 sunlight *= 1-night;
                 // Scene ambient tracks the physical sky at night. The legacy constants remain
                 // available for ocean-only scenes without an atmosphere component.
-                // float3 skyAmbient = atmosphereActive ? max(SampleSH(float3(0, 1, 0)), 0.0) : 0.25;
-                float3 skyAmbient = 0.25;
+                float3 skyAmbient = atmosphereActive ? max(SampleSH(float3(0, 1, 0)), 0.0) : 0.25;
                 float2 refractUV = screenUV;
                 float thickness = 80;
                 float3 background = _DeepColor.rgb;
