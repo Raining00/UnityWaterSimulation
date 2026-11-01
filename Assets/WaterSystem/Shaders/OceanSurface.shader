@@ -255,15 +255,16 @@ Shader "WaterSystem/Ocean"
                 float sunlight = sun.shadowAttenuation * sun.distanceAttenuation;
                 float3 moonDirection = OceanMoonDirection();
                 float3 moonLight = OceanMoonLight(night);
-                bool atmosphereActive = AtmosphereEnabled() && _AtmosphereSkyReflectionParams.x > 0;
-                if (atmosphereActive)
-                    sunlight *= smoothstep(-0.02, 0.05, _AtmosphereSun.y);
-                else
-                    sunlight *= lerp(1.0,smoothstep(-0.02,0.05,sun.direction.y),night);
+                // bool atmosphereActive = AtmosphereEnabled() && _AtmosphereSkyReflectionParams.x > 0;
+                // if (atmosphereActive)
+                //     sunlight *= smoothstep(-0.02, 0.05, _AtmosphereSun.y);
+                // else
+                sunlight *= lerp(1.0,smoothstep(-0.02,0.05,sun.direction.y),night);
                 sunlight *= 1-night;
                 // Scene ambient tracks the physical sky at night. The legacy constants remain
                 // available for ocean-only scenes without an atmosphere component.
-                float3 skyAmbient = atmosphereActive ? max(SampleSH(float3(0, 1, 0)), 0.0) : 0.25;
+                // float3 skyAmbient = atmosphereActive ? max(SampleSH(float3(0, 1, 0)), 0.0) : 0.25;
+                float3 skyAmbient = 0.25;
                 float2 refractUV = screenUV;
                 float thickness = 80;
                 float3 background = _DeepColor.rgb;
@@ -294,8 +295,8 @@ Shader "WaterSystem/Ocean"
                 float3 scatterColor = lerp(_ShallowColor.rgb,_DeepColor.rgb,1-exp(-thickness*_Scattering));
                 scatterColor = lerp(scatterColor,OceanNightPalette(1-exp(-thickness*_Scattering)),night);
                 float3 lighting = 0.25 + sun.color*(0.35+0.65*saturate(sun.direction.y))*sunlight;
-                if (atmosphereActive)
-                    lighting = skyAmbient + sun.color * saturate(sun.direction.y) * sunlight;
+                // if (atmosphereActive)
+                //     lighting = skyAmbient + sun.color * saturate(sun.direction.y) * sunlight;
                 lighting = lerp(lighting,_OceanNightTransition.z+skyAmbient*0.5,night);
                 lighting += moonLight*saturate(moonDirection.y)*0.35;
                 float3 refraction = background*transmittance + scatterColor*(1-transmittance)*lighting;
@@ -312,17 +313,19 @@ Shader "WaterSystem/Ocean"
                 float3 r = reflect(-v,n);
                 float3 fallbackSky = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(r.y)));
                 float3 environment=fallbackSky;
-                if (atmosphereActive)
-                {
-                    // A dark reflection is valid at night. Read the live atmosphere cubemap
-                    // directly, including at the horizon; local probes may still contain a day sky.
-                    environment = OceanAtmosphereReflection(r, _Roughness);
-                }
-                else if(!analyticalHorizon)
-                {
-                    environment = GlossyEnvironmentReflection(r,_Roughness,1);
-                    environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
-                }
+                // if (atmosphereActive)
+                // {
+                //     // A dark reflection is valid at night. Read the live atmosphere cubemap
+                //     // directly, including at the horizon; local probes may still contain a day sky.
+                //     environment = OceanAtmosphereReflection(r, _Roughness);
+                // }
+                // else if(!analyticalHorizon)
+                // {
+                    // environment = GlossyEnvironmentReflection(r,_Roughness,1);
+                    // environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
+                // }
+                environment = GlossyEnvironmentReflection(r,_Roughness,1);
+                environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
                 environment = OceanNightEnvironment(r,_Roughness,environment,night);
                 float fresnel = Fresnel(NoV);
                 float3 color = lerp(refraction,environment*_ReflectionStrength,fresnel);
@@ -347,8 +350,8 @@ Shader "WaterSystem/Ocean"
                         internalReflection = saturate((rs*rs+rp*rp)*0.5);
                         float3 airRay = refract(-v,n,_UnderwaterIOR);
                         transmittedColor = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(airRay.y)));
-                        if (atmosphereActive)
-                            transmittedColor = OceanAtmosphereReflection(airRay, 0.0);
+                        // if (atmosphereActive)
+                        //     transmittedColor = OceanAtmosphereReflection(airRay, 0.0);
                         // Screen-space above-water objects are approximate; rays outside the viewport use sky.
                         if (_UseSceneTextures>0.5 && !analyticalHorizon)
                         {
@@ -378,7 +381,8 @@ Shader "WaterSystem/Ocean"
                     float textureFoam = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+_OceanSimulationTime*float2(0.008,0.004),0).r;
                     float textureFoam2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-_OceanSimulationTime*float2(0.003,0.006),0).r;
                     foam *= smoothstep(0.15,0.8,(textureFoam+textureFoam2)*0.5);
-                    float3 foamAmbient = atmosphereActive ? max(SampleSH(n), 0.0) : 0.3;
+                    // float3 foamAmbient = atmosphereActive ? max(SampleSH(n), 0.0) : 0.3;
+                    float3 foamAmbient = 0.3;
                     float3 foamLighting = foamAmbient+sun.color*saturate(dot(n,sun.direction))*sunlight;
                     foamLighting = lerp(foamLighting,foamAmbient+_OceanNightHorizon.rgb*0.15,night);
                     foamLighting += moonLight*saturate(dot(n,moonDirection));

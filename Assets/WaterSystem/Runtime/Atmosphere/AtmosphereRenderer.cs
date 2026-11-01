@@ -119,7 +119,7 @@ namespace WaterSystem.Ocean
             RenderPipelineManager.endCameraRendering -= EndCameraRendering;
             RestoreSceneState();
             ReleaseResources();
-            // Ocean and spray shaders fall back to Unity fog and probe reflections.
+            // Ocean shaders fall back to Unity fog and probe reflections.
             Shader.SetGlobalVector(AtmosphereShaderIDs.World, new Vector4(SeaLevelY, 0, 0, 0));
             Shader.SetGlobalVector(AtmosphereShaderIDs.CloudShadowParams, Vector4.zero);
             Shader.SetGlobalVector(AtmosphereShaderIDs.NightSkyParams, Vector4.zero);

@@ -1,7 +1,7 @@
 Shader "WaterSystem/Atmosphere/Aerial Perspective"
 {
     // Full-screen triangle issued by AtmosphereRenderer before transparents: applies the aerial perspective
-    // LUT to every opaque pixel. Transparent water and spray apply it in their own shaders.
+    // LUT to every opaque pixel. Transparent surfaces handle their own aerial perspective.
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Transparent" "Queue"="Transparent-30" }

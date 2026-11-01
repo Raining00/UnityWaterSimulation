@@ -4,7 +4,7 @@ A Unity URP ocean project with FFT waves, realistic and stylized water, atmosphe
 
 - **Ocean:** Animated FFT waves, an expansive horizon, reflections, refraction, foam, and caustics.
 - **Underwater:** Submerged views, waterline transitions, underwater haze, and sunlight shafts.
-- **Atmosphere:** Volumetric clouds and changing sky and ocean colors from noon to sunset.
+- **Atmosphere:** Volumetric clouds and changing sky colors from noon to sunset.
 - **Night:** Stars, the Milky Way, a textured moon, moonlight on the sea, and bioluminescent foam.
 - **Interaction:** Floating rigid bodies, boat buoyancy, powered navigation, and surface wakes.
 

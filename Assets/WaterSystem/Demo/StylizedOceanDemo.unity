@@ -636,34 +636,6 @@ MonoBehaviour:
     CausticStrength: 0.6
     CausticDepth: 18
     UseSceneTextures: 1
-  Spray:
-    Enabled: 1
-    Capacity: 8192
-    Radius: 45
-    EmissionRate: 12000
-    FoamThreshold: 0.12
-    BreakingThreshold: 0.02
-    Lifetime: {x: 0.65, y: 1.6}
-    Size: {x: 0.06, y: 0.18}
-    UpwardSpeed: {x: 2, y: 4}
-    WindInfluence: 0.25
-    Drag: 1.2
-    GravityScale: 0.8
-    MistFraction: 0.2
-    MistSizeMultiplier: 3.5
-    Opacity: 0.45
-    SoftIntersectionDistance: 0.35
-    Tint: {r: 1, g: 1, b: 1, a: 1}
-    WaveVelocityInheritance: 0.8
-    MaxInheritedSpeed: 8
-    SplashFraction: 0.35
-    SplashSizeMultiplier: 12
-    BurstSpread: 0.6
-    Turbulence: 0.65
-    HighlightStrength: 0.8
-    Backlighting: 0.6
-    ReceiveSunShadows: 1
-    MaxParticlesPerTile: 64
   legacySurfaceMaterial: {fileID: 0}
   PreviewSimulation: 1
   InfiniteHorizon: 1

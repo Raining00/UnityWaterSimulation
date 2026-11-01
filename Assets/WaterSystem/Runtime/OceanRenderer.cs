@@ -240,7 +240,7 @@ namespace WaterSystem.Ocean
             if (shader == null) throw new InvalidOperationException("OceanDefaults is missing its " + ShadingMode + " surface shader.");
             if (runtimeMaterial == null || runtimeMaterial.shader != shader)
             {
-                // Appearance switches must not release geometry, FFT textures or particle history.
+                // Appearance switches must not release geometry, FFT textures or foam history.
                 DestroyOwned(runtimeMaterial);
                 runtimeMaterial = new Material(shader)
                 {

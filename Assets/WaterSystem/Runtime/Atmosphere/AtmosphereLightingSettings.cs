@@ -19,7 +19,7 @@ namespace WaterSystem.Ocean
         public bool DriveSkybox = true;
         [Tooltip("Turn off Unity's distance fog; aerial perspective replaces it.")]
         public bool DisableUnityFog = true;
-        [Tooltip("Full-screen aerial perspective on opaque geometry. Water and spray always apply their own.")]
+        [Tooltip("Full-screen aerial perspective on opaque geometry.")]
         public bool ApplyAerialPerspective = true;
     }
 }
