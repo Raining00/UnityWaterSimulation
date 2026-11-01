@@ -1,0 +1,36 @@
+Moon albedo map - NASA SVS CGI Moon Kit (2019 color version)
+
+Asset: MoonAlbedo_NASA_LROC_4K.tif
+Original filename: lroc_color_poles_4k.tif
+Original download: https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_4k.tif
+Source item: https://svs.gsfc.nasa.gov/4720/
+Downloaded: 2026-10-29
+
+Credit: NASA's Scientific Visualization Studio.
+Visualization: Ernie Wright (USRA); scientist: Noah Petro (NASA/GSFC).
+Source measurements: Lunar Reconnaissance Orbiter, LROC Wide Angle Camera
+Hapke-normalized color mosaic (Arizona State University); polar fill from LOLA.
+
+NASA SVS states its content is public domain unless an item notes otherwise,
+and permits downloading, use and redistribution. This item lists no special
+image restriction. NASA names/logos do not imply endorsement.
+Reuse information: https://svs.gsfc.nasa.gov/help/
+
+Unmodified source TIFF, 4096 x 2048, 8-bit RGB, no alpha. 13,095,388 bytes.
+SHA256: 918649A7F8ED2F1329B2CD95BB0D25483BEFDCB60AE1A66DB681A637CC21344F
+
+Projection: global cylindrical/equirectangular longitude-latitude map, centered
+on lunar longitude 0 degrees. North is at the top; latitude 0 is the middle row.
+Longitude 0 at UV (0.5, 0.5) shows the near side viewed from Earth. The left and
+right edges meet on the far side. This is a surface color/albedo map, not a
+photograph of a pre-lit moon disc, so it can be mapped onto a shader sphere.
+
+The NASA color product is gamma-corrected/white-balanced for human appearance,
+not calibrated scientific reflectance. The chosen 2019 map is sRGB-like LDR,
+not linear EXR or HDR radiance. Import with sRGB on for Unity linear rendering.
+The full-color source covers approximately 70 N to 70 S; polar areas were filled
+using a lower-resolution monochrome albedo map, which is visible in the texture.
+
+Unity import: Default 2D; maximum 4096; sRGB on; Repeat U and Clamp V;
+trilinear filtering, mipmaps, no alpha; high-quality compression. Local QA PNG
+is a display preview only and is not part of the game asset.

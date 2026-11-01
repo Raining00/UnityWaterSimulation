@@ -1,0 +1,41 @@
+Milky Way background - Deep Star Maps 2020
+
+Asset: MilkyWay_NASA_2020_4K.exr
+Original filename: milkyway_2020_4k.exr
+Source item: https://svs.gsfc.nasa.gov/4851/
+Original download: https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/milkyway_2020_4k.exr
+Downloaded: 2026-10-29
+
+Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio.
+Visualization: Ernie Wright (USRA).
+Gaia DR2 data: ESA/Gaia/DPAC.
+
+Reuse status: NASA SVS states its content is public domain unless an individual item
+notes otherwise, and permits downloading, use and redistribution. The source item
+does not list a special image restriction. NASA names/logos do not imply endorsement.
+NASA SVS reuse information: https://svs.gsfc.nasa.gov/help/
+NASA media guidelines: https://www.nasa.gov/nasa-brand-center/images-and-media/
+
+Format: original, unmodified OpenEXR, 4096 x 2048, RGB half-float, linear HDR.
+The source stores normalized values, not calibrated physical radiance. Verified
+using Blender's full-resolution Linear Rec.709 image buffer: RGB maximum (1,1,1),
+mean (0.0296251,0.0263045,0.0234416); luminance median 0.0138286 and p99 0.197252.
+The half-float file preserves linear precision; HDR here does not mean every
+pixel has a value above one. Runtime artistic intensity is set independently.
+Projection: full-sphere plate carree/equirectangular, celestial ICRF/J2000 coordinates.
+The centre is right ascension 0h; right ascension increases to the left; the top
+is positive declination. This is a full rectangular sphere map, not Mollweide.
+
+This NASA layer omits bright Hipparcos/Tycho foreground stars while retaining the
+Gaia star background, dense Milky Way structure and star clusters. It is suitable
+for adding a separate bright-star layer; it is not a completely star-free nebula.
+No ground, clouds, grid or constellation labels are baked into this image.
+
+Suggested Unity import: Default 2D texture; sRGB off; max size 4096; Repeat U,
+Clamp V; trilinear filtering and mipmaps; preserve HDR (automatic HDR compression
+or uncompressed RGB half). Do not import it as a normal map or apply sRGB decoding.
+Sampling: top row represents north, bottom row south. In standard Unity texture UVs,
+latitude/declination is mapped by v = asin(direction.y) / PI + 0.5. Longitude
+orientation is controlled by the night-sky rotation/mapping; the source RA grows left.
+
+SHA256: 2EB802D6E68D170B410F766C7FEC07F7518619F6B6708FDC81E9302D93E74FDB

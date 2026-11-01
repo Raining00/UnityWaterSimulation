@@ -26,6 +26,7 @@ namespace WaterSystem.Ocean
         public OceanShadingMode ShadingMode = OceanShadingMode.Physical;
         public OceanStylizedSettings Stylized = new OceanStylizedSettings();
         public OceanRenderSettings Rendering = new OceanRenderSettings();
+        public OceanNightSettings Night = new OceanNightSettings();
         public OceanUnderwaterSettings Underwater = new OceanUnderwaterSettings();
         // Stylized mode has its own volume pass and palette, so it does not share Underwater above.
         public OceanStylizedUnderwaterSettings StylizedUnderwater = new OceanStylizedUnderwaterSettings();
@@ -194,6 +195,7 @@ namespace WaterSystem.Ocean
             Simulation=fft;
             fft.RunInEditMode=PreviewSimulation;
             Rendering ??= new OceanRenderSettings();
+            Night ??= new OceanNightSettings();
             Stylized ??= new OceanStylizedSettings();
             Underwater ??= new OceanUnderwaterSettings();
             StylizedUnderwater ??= new OceanStylizedUnderwaterSettings();
@@ -274,6 +276,7 @@ namespace WaterSystem.Ocean
             catch (Exception exception) { Debug.LogException(exception, this); enabled = false; return; }
             if (ShadingMode == OceanShadingMode.Stylized) Stylized.Apply(runtimeMaterial, OceanResources.Load());
             else { Rendering.Apply(runtimeMaterial, OceanResources.Load()); Underwater.ApplySurface(runtimeMaterial); }
+            Night.Apply(runtimeMaterial);
             UpdateSimulation();
             if (!cameras.TryGetValue(camera, out var state))
             {

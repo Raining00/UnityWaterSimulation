@@ -1,0 +1,141 @@
+// Volumetric cloud passes: reduced-resolution camera march with temporal reprojection,
+// a lat-long panorama for reflections and ambient, and a sun-space shadow map.
+#pragma kernel CloudMarch
+#pragma kernel CloudResolve
+#pragma kernel CloudPanorama
+#pragma kernel CloudShadowMap
+
+#include "CloudCommon.hlsl"
+
+RWTexture2D<float4> _CloudRaw;          // march output: premultiplied radiance, transmittance
+RWTexture2D<float> _CloudRawDepth;      // mean cloud distance (m)
+Texture2D<float4> _CloudRawRead;
+Texture2D<float> _CloudRawDepthRead;
+Texture2D<float4> _CloudHistory;
+Texture2D<float> _CloudHistoryDepth;
+RWTexture2D<float4> _CloudHistoryOut;
+RWTexture2D<float> _CloudHistoryDepthOut;
+RWTexture2D<float4> _CloudPanoramaOutput;
+RWTexture2D<float> _CloudShadowOutput;
+SamplerState sampler_LinearClamp;
+
+float4 _CloudTemporal;     // x history weight (0 resets), y jitter x, z jitter y (sub pixel), w step jitter [0,1)
+float4 _CloudBufferSize;   // x width, y height, z 1/width, w 1/height
+float4 _CloudPanoramaSize; // x width, y height
+float4 _CloudShadowSetup;  // x size (m), y offset u, z offset v, w resolution
+float4 _CloudShadowDirection; // xyz light travel direction (-sun), w strength
+float4x4 _CloudInverseViewProjection;
+float4x4 _CloudPreviousViewProjection;
+float4x4 _CloudShadowLightToWorld;
+
+float3 CloudRayDirection(float2 uv)
+{
+    float4 h = mul(_CloudInverseViewProjection, float4(uv * 2.0 - 1.0, 1.0, 1.0));
+    return normalize(h.xyz / h.w - _AtmosphereCamera.xyz);
+}
+
+[numthreads(8,8,1)]
+void CloudMarch(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_CloudBufferSize.x || id.y >= (uint)_CloudBufferSize.y) return;
+    float2 uv = (id.xy + 0.5 + _CloudTemporal.yz) * _CloudBufferSize.zw;
+    float3 direction = CloudRayDirection(uv);
+    CloudMarchResult r = MarchClouds(direction, _CloudTemporal.w, (int)_CloudMarch.x, 6, 8, true);
+    _CloudRaw[id.xy] = float4(r.radiance, r.transmittance);
+    _CloudRawDepth[id.xy] = r.meanDistance;
+}
+
+// Reproject last frame's result with neighbourhood clamping, then blend.
+[numthreads(8,8,1)]
+void CloudResolve(uint3 id : SV_DispatchThreadID)
+{
+    int2 size = int2(_CloudBufferSize.xy);
+    if (id.x >= (uint)size.x || id.y >= (uint)size.y) return;
+    float4 current = _CloudRawRead[id.xy];
+    float distance = _CloudRawDepthRead[id.xy];
+    float4 result = current;
+    float resultDistance = distance;
+    if (_CloudTemporal.x > 0.0)
+    {
+        float2 uv = (id.xy + 0.5) * _CloudBufferSize.zw;
+        float3 direction = CloudRayDirection(uv);
+        float3 positionWS = _AtmosphereCamera.xyz + direction * distance;
+        float4 previousClip = mul(_CloudPreviousViewProjection, float4(positionWS, 1.0));
+        if (previousClip.w > 0.0)
+        {
+            float2 previousUV = previousClip.xy / previousClip.w * 0.5 + 0.5;
+            if (all(previousUV > 0.0) && all(previousUV < 1.0))
+            {
+                float4 history = _CloudHistory.SampleLevel(sampler_LinearClamp, previousUV, 0);
+                float previousDistance = _CloudHistoryDepth.SampleLevel(sampler_LinearClamp, previousUV, 0);
+                float4 lo = current, hi = current;
+                for (int y = -1; y <= 1; y++)
+                for (int x = -1; x <= 1; x++)
+                {
+                    int2 c = clamp(int2(id.xy) + int2(x, y), 0, size - 1);
+                    float4 n = _CloudRawRead[c];
+                    lo = min(lo, n);
+                    hi = max(hi, n);
+                }
+                history = clamp(history, lo, hi);
+                // Jitter changes the mean distance at cloud edges every frame; only reject gross disocclusions.
+                float distanceDifference = abs(previousDistance - distance) / max(distance, 1.0);
+                float weight = _CloudTemporal.x * (1.0 - saturate((distanceDifference - 0.6) * 2.5));
+                result = lerp(current, history, weight);
+                resultDistance = lerp(distance, previousDistance, weight * 0.5);
+            }
+        }
+    }
+    _CloudHistoryOut[id.xy] = result;
+    _CloudHistoryDepthOut[id.xy] = resultDistance;
+}
+
+// Low-cost march over the upper hemisphere from the camera position, used by reflections and ambient.
+[numthreads(8,8,1)]
+void CloudPanorama(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_CloudPanoramaSize.x || id.y >= (uint)_CloudPanoramaSize.y) return;
+    float2 uv = (id.xy + 0.5) / _CloudPanoramaSize.xy;
+    float3 direction = CloudPanoramaDirection(uv);
+    CloudMarchResult r = MarchClouds(direction, 0.5, min((int)_CloudMarch.x, 48), 4, 6, false);
+    _CloudPanoramaOutput[id.xy] = float4(r.radiance, r.transmittance);
+}
+
+// Sun-space transmittance through the layer, laid out exactly like a URP directional light cookie.
+[numthreads(8,8,1)]
+void CloudShadowMap(uint3 id : SV_DispatchThreadID)
+{
+    uint resolution = (uint)_CloudShadowSetup.w;
+    if (id.x >= resolution || id.y >= resolution) return;
+    float2 uv = (id.xy + 0.5) / _CloudShadowSetup.w;
+    float2 local = (uv - 0.5 + _CloudShadowSetup.yz) * _CloudShadowSetup.x;
+    float3 originWS = mul(_CloudShadowLightToWorld, float4(local, 0.0, 1.0)).xyz;
+    float3 direction = _CloudShadowDirection.xyz;
+    float3 originKm = AtmosphereWorldToPlanetKm(originWS);
+    float t0, t1, b0, b1;
+    float shadow = 1.0;
+    if (LineSphereIntersect(originKm, direction, _AtmosphereRadii.w, t0, t1))
+    {
+        // Light enters the outer shell at t0 and leaves the layer at the inner shell (b0) or the outer shell (t1).
+        float segmentStart = t0 * 1000.0;
+        float segmentEnd = (LineSphereIntersect(originKm, direction, _AtmosphereRadii.z, b0, b1) ? b0 : t1) * 1000.0;
+        if (segmentEnd > segmentStart)
+        {
+            const int steps = 12;
+            float stepLength = (segmentEnd - segmentStart) / steps;
+            float opticalDepth = 0.0;
+            float4 weather;
+            for (int i = 0; i < steps; i++)
+            {
+                float t = segmentStart + (i + 0.5) * stepLength;
+                float3 positionKm = originKm + direction * (t * 0.001);
+                float h = CloudHeightFraction(positionKm);
+                if (h < 0.0 || h > 1.0) continue;
+                opticalDepth += CloudDensity(originWS + direction * t, h, false, weather) * stepLength;
+            }
+            shadow = exp(-opticalDepth * _CloudDensity.x * 0.75);
+        }
+    }
+    float border = smoothstep(0.5, 0.42, max(abs(uv.x - 0.5), abs(uv.y - 0.5)));
+    _CloudShadowOutput[id.xy] = lerp(1.0, shadow, border * _CloudShadowDirection.w);
+}

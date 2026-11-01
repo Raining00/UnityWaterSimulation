@@ -1,0 +1,201 @@
+// Sky lookup tables after Hillaire 2020. All kernels read the globals declared in AtmosphereCommon.hlsl.
+#pragma kernel TransmittanceLUT
+#pragma kernel MultiScatteringLUT
+#pragma kernel SkyViewLUT
+#pragma kernel AerialPerspectiveLUT
+#pragma kernel SkyCubemap
+#pragma kernel AmbientProbe
+
+#include "NightSkyCommon.hlsl"
+
+RWTexture2D<float4> _TransmittanceOutput;
+RWTexture2D<float4> _MultiScatterOutput;
+RWTexture2D<float4> _SkyViewOutput;
+RWTexture3D<float4> _AerialOutput;
+RWTexture2DArray<float4> _SkyCubemapOutput;
+RWStructuredBuffer<float4> _AmbientOutput; // 0 sky, 1 equator, 2 ground, 3 sun transmittance at the camera
+float4x4 _AtmosphereInverseViewProjection;  // camera (OpenGL clip convention), used for aerial perspective froxels
+float _SkyCubemapSize;
+
+// Optical depth to the top of the atmosphere; directions are parametrised so none hit the ground.
+[numthreads(8,8,1)]
+void TransmittanceLUT(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)ATMOSPHERE_TRANSMITTANCE_WIDTH || id.y >= (uint)ATMOSPHERE_TRANSMITTANCE_HEIGHT) return;
+    float2 uv = (id.xy + 0.5) / float2(ATMOSPHERE_TRANSMITTANCE_WIDTH, ATMOSPHERE_TRANSMITTANCE_HEIGHT);
+    float viewRadius, viewZenithCos;
+    UvToTransmittanceParams(uv, viewRadius, viewZenithCos);
+    float3 position = float3(0, viewRadius, 0);
+    float3 direction = float3(sqrt(saturate(1.0 - viewZenithCos * viewZenithCos)), viewZenithCos, 0);
+    float tMax = RaySphereIntersectNearest(position, direction, 0, _AtmosphereRadii.y);
+    float3 opticalDepth = 0;
+    if (tMax > 0.0)
+    {
+        const float sampleCount = 40.0;
+        float dt = tMax / sampleCount;
+        for (float s = 0.5; s < sampleCount; s += 1.0)
+            opticalDepth += SampleAtmosphereMedium(position + direction * (dt * s)).extinction * dt;
+    }
+    _TransmittanceOutput[id.xy] = float4(exp(-opticalDepth), 1);
+}
+
+groupshared float3 gMultiScatAs1[64];
+groupshared float3 gLuminance[64];
+
+// One thread group of 64 uniform directions per texel (sun zenith angle, altitude).
+[numthreads(1,1,64)]
+void MultiScatteringLUT(uint3 id : SV_DispatchThreadID, uint3 groupThread : SV_GroupThreadID)
+{
+    float2 uv = (id.xy + 0.5) / ATMOSPHERE_MULTISCATTER_SIZE;
+    uv = float2(FromSubUvsToUnit(uv.x, ATMOSPHERE_MULTISCATTER_SIZE), FromSubUvsToUnit(uv.y, ATMOSPHERE_MULTISCATTER_SIZE));
+    float sunZenithCos = uv.x * 2.0 - 1.0;
+    float3 sunDir = normalize(float3(sqrt(saturate(1.0 - sunZenithCos * sunZenithCos)), sunZenithCos, 0));
+    float bottom = _AtmosphereRadii.x, top = _AtmosphereRadii.y;
+    float viewRadius = bottom + saturate(uv.y + ATMOSPHERE_PLANET_RADIUS_OFFSET) * (top - bottom - ATMOSPHERE_PLANET_RADIUS_OFFSET);
+    float3 position = float3(0, viewRadius, 0);
+    uint i = groupThread.z;
+    float randA = ((i / 8) + 0.5) / 8.0;
+    float randB = ((i % 8) + 0.5) / 8.0;
+    float theta = 2.0 * PI * randA;
+    float cosPhi = 1.0 - 2.0 * randB;
+    float sinPhi = sqrt(saturate(1.0 - cosPhi * cosPhi));
+    float3 direction = float3(cos(theta) * sinPhi, cosPhi, sin(theta) * sinPhi);
+    AtmosphereIntegration result = IntegrateScatteredLuminance(position, direction, sunDir, 1.0, true, 20.0, 9e9, false, false, false);
+    const float sphereSolidAngle = 4.0 * PI;
+    gMultiScatAs1[i] = result.multiScatAs1 * sphereSolidAngle / 64.0;
+    gLuminance[i] = result.luminance * sphereSolidAngle / 64.0;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (i < stride)
+        {
+            gMultiScatAs1[i] += gMultiScatAs1[i + stride];
+            gLuminance[i] += gLuminance[i + stride];
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (i > 0) return;
+    const float isotropicPhase = 1.0 / (4.0 * PI);
+    float3 fms = gMultiScatAs1[0] * isotropicPhase;
+    float3 secondOrder = gLuminance[0] * isotropicPhase;
+    float3 psi = secondOrder / max(1.0 - fms, 1e-4);
+    _MultiScatterOutput[id.xy] = float4(psi, 1);
+}
+
+// Sky luminance for the camera altitude, parametrised by view zenith and sun-relative azimuth.
+[numthreads(8,8,1)]
+void SkyViewLUT(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_AtmosphereLUT.x || id.y >= (uint)_AtmosphereLUT.y) return;
+    float2 uv = (id.xy + 0.5) / _AtmosphereLUT.xy;
+    float viewRadius = _AtmosphereCamera.w;
+    float viewZenithCos, lightViewCos;
+    UvToSkyViewParams(uv, viewRadius, viewZenithCos, lightViewCos);
+    float sunZenithCos = clamp(_AtmosphereSun.y, -1.0, 1.0);
+    float3 sunDir = normalize(float3(sqrt(saturate(1.0 - sunZenithCos * sunZenithCos)), sunZenithCos, 0));
+    float viewZenithSin = sqrt(saturate(1.0 - viewZenithCos * viewZenithCos));
+    float3 direction = float3(viewZenithSin * lightViewCos, viewZenithCos, viewZenithSin * sqrt(saturate(1.0 - lightViewCos * lightViewCos)));
+    float3 position = float3(0, viewRadius, 0);
+    AtmosphereIntegration result = IntegrateScatteredLuminance(position, direction, sunDir, _AtmosphereSunIlluminance.xyz, true, 30.0, 9e9, true, true, true);
+    _SkyViewOutput[id.xy] = float4(result.luminance, 1);
+}
+
+// Camera frustum froxels: in-scattered luminance and grey transmittance up to each slice distance.
+[numthreads(4,4,4)]
+void AerialPerspectiveLUT(uint3 id : SV_DispatchThreadID)
+{
+    uint slices = (uint)_AtmosphereLUT.z;
+    if (id.x >= 32 || id.y >= 32 || id.z >= slices) return;
+    float2 uv = (id.xy + 0.5) / 32.0;
+    float4 h = mul(_AtmosphereInverseViewProjection, float4(uv * 2.0 - 1.0, 1.0, 1.0));
+    float3 direction = normalize(h.xyz / h.w - _AtmosphereCamera.xyz);
+    float tMax = AerialSliceToDistanceKm(id.z + 0.5);
+    float3 cameraKm = AtmosphereCameraPlanetKm();
+    float3 endKm = cameraKm + direction * tMax;
+    float endRadius = length(endKm);
+    if (endRadius <= _AtmosphereRadii.x + ATMOSPHERE_PLANET_RADIUS_OFFSET)
+    {
+        endKm = normalize(endKm) * (_AtmosphereRadii.x + ATMOSPHERE_PLANET_RADIUS_OFFSET + 0.001);
+        tMax = length(endKm - cameraKm);
+    }
+    float sampleCount = max(2.0, min(32.0, (id.z + 1.0) * 2.0));
+    AtmosphereIntegration result = IntegrateScatteredLuminance(cameraKm, direction, _AtmosphereSun.xyz, _AtmosphereSunIlluminance.xyz, false, sampleCount, tMax, false, true, true);
+    float transmittance = dot(result.transmittance, 1.0 / 3.0);
+    _AerialOutput[id] = float4(result.luminance, transmittance);
+}
+
+float3 CubemapDirection(uint face, float2 st)
+{
+    // Direct3D face layout: texel row 0 is the top of each face.
+    float s = st.x, t = st.y;
+    switch (face)
+    {
+        case 0: return float3(1, -t, -s);
+        case 1: return float3(-1, -t, s);
+        case 2: return float3(s, 1, t);
+        case 3: return float3(s, -1, -t);
+        case 4: return float3(s, -t, 1);
+        default: return float3(-s, -t, -1);
+    }
+}
+
+// Reflection environment: sky plus the cloud panorama, no sun disc (the water adds its own highlight).
+[numthreads(8,8,1)]
+void SkyCubemap(uint3 id : SV_DispatchThreadID)
+{
+    uint size = (uint)_SkyCubemapSize;
+    if (id.x >= size || id.y >= size || id.z >= 6) return;
+    float2 st = ((id.xy + 0.5) / _SkyCubemapSize) * 2.0 - 1.0;
+    float3 direction = normalize(CubemapDirection(id.z, st));
+    // The diffuse map contains faint stars; omit the tiny procedural stars from low-res reflections.
+    float3 sky = AtmosphereSkyRadiance(direction) + NightSkyRadiance(direction, 2.0 / _SkyCubemapSize, false);
+    float4 clouds = SampleCloudPanorama(direction);
+    _SkyCubemapOutput[id] = float4(sky * clouds.a + clouds.rgb, 1);
+}
+
+groupshared float4 gSky[64];
+groupshared float4 gEquator[64];
+
+// Hemisphere integrals of the final sky (with clouds) for tri-light ambient, plus the sun transmittance.
+[numthreads(64,1,1)]
+void AmbientProbe(uint3 id : SV_DispatchThreadID)
+{
+    const uint directionCount = 1024;
+    const float solidAngle = 4.0 * PI / directionCount;
+    float4 sky = 0, equator = 0;
+    for (uint k = 0; k < directionCount / 64; k++)
+    {
+        uint i = id.x * (directionCount / 64) + k;
+        float y = 1.0 - 2.0 * (i + 0.5) / directionCount;
+        float r = sqrt(saturate(1.0 - y * y));
+        float phi = i * 2.39996323;
+        float3 direction = float3(r * cos(phi), y, r * sin(phi));
+        float3 L = AtmosphereSkyRadiance(direction) + NightSkyRadiance(direction, 0.04, false);
+        float4 clouds = SampleCloudPanorama(direction);
+        L = L * clouds.a + clouds.rgb;
+        if (y > 0.0) sky += float4(L * y * solidAngle, 0);
+        if (y > 0.0 && y < 0.3) equator += float4(L * solidAngle, solidAngle);
+    }
+    gSky[id.x] = sky;
+    gEquator[id.x] = equator;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (id.x < stride)
+        {
+            gSky[id.x] += gSky[id.x + stride];
+            gEquator[id.x] += gEquator[id.x + stride];
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (id.x > 0) return;
+    float3 skyIrradiance = gSky[0].rgb;              // irradiance on an upward facing surface
+    float3 horizonRadiance = gEquator[0].rgb / max(gEquator[0].a, 1e-5);
+    float3 sunTransmittance = SunTransmittanceAt(AtmosphereCameraPlanetKm());
+    float3 groundIrradiance = skyIrradiance + _AtmosphereSunIlluminance.xyz * sunTransmittance * saturate(_AtmosphereSun.y);
+    float3 ground = _AtmosphereGround.xyz * groundIrradiance / PI;
+    _AmbientOutput[0] = float4(skyIrradiance / PI, 1);
+    _AmbientOutput[1] = float4(0.5 * (horizonRadiance + ground), 1);
+    _AmbientOutput[2] = float4(ground, 1);
+    _AmbientOutput[3] = float4(sunTransmittance, 1);
+}

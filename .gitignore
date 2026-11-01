@@ -44,6 +44,8 @@
 
 # Visual Studio cache directory
 .vs/
+.ideal/
+LakeRenderingComparison/
 Document/
 .ideal/
 # Gradle cache directory

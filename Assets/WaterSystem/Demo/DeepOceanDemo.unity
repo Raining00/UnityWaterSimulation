@@ -14,25 +14,25 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 10
-  m_Fog: 1
+  m_Fog: 0
   m_FogColor: {r: 0.53, g: 0.66, b: 0.73, a: 1}
   m_FogMode: 3
   m_FogDensity: 0.00055
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.35, g: 0.48, b: 0.65, a: 1}
-  m_AmbientEquatorColor: {r: 0.2, g: 0.28, b: 0.33, a: 1}
-  m_AmbientGroundColor: {r: 0.1, g: 0.15, b: 0.18, a: 1}
+  m_AmbientSkyColor: {r: 0.13657269, g: 0.11694384, b: 0.34218404, a: 1}
+  m_AmbientEquatorColor: {r: 0.08043886, g: 0.0541114, b: 0.2367923, a: 1}
+  m_AmbientGroundColor: {r: 0.005, g: 0.006, b: 0.01661584, a: 1}
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: 169d2dcf03ad3c84a9bce8550c0c9fb9, type: 2}
+  m_SkyboxMaterial: {fileID: 0}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
   m_HaloTexture: {fileID: 0}
   m_SpotCookie: {fileID: 10001, guid: 0000000000000000e000000000000000, type: 0}
-  m_DefaultReflectionMode: 0
+  m_DefaultReflectionMode: 1
   m_DefaultReflectionResolution: 128
   m_ReflectionBounces: 1
   m_ReflectionIntensity: 1
@@ -373,6 +373,7 @@ GameObject:
   - component: {fileID: 265525051}
   - component: {fileID: 265525050}
   - component: {fileID: 265525052}
+  - component: {fileID: 265525053}
   m_Layer: 0
   m_Name: Ocean Sun
   m_TagString: Untagged
@@ -390,8 +391,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 1, g: 0.94, b: 0.84, a: 1}
-  m_Intensity: 6.85
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_Intensity: 3.15
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -453,7 +454,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 265525049}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.035095338, y: -0.9376806, z: 0.3311295, w: 0.099381715}
+  m_LocalRotation: {x: 0.09320041, y: 0.8915098, z: 0.21402341, w: -0.38822427}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -475,8 +476,8 @@ MonoBehaviour:
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
   m_CustomShadowLayers: 0
-  m_LightCookieSize: {x: 1, y: 1}
-  m_LightCookieOffset: {x: 0, y: 0}
+  m_LightCookieSize: {x: 24000, y: 24000}
+  m_LightCookieOffset: {x: 0.000328389, y: 0.0012937394}
   m_SoftShadowQuality: 0
   m_RenderingLayersMask:
     serializedVersion: 0
@@ -489,6 +490,24 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!114 &265525053
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 265525049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbe06230127914d05b9fb9e574a29277, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.AtmosphereSunAnimator
+  TimeOfDay: 19.8
+  Latitude: 0
+  Declination: 0.5
+  NorthYaw: 136.50203
+  Speed: 0.027
+  matched: 1
 --- !u!1001 &313456430
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -541,9 +560,20 @@ PrefabInstance:
       propertyPath: m_Name
       value: SectionBoat
       objectReference: {fileID: 0}
+    - target: {fileID: 8022813716282332560, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_CenterOfMass.y
+      value: -0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8022813716282332560, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      propertyPath: m_CenterOfMass.z
+      value: -0.5
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1555344612}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
 --- !u!1 &458639857
@@ -1049,6 +1079,55 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!1 &960441737
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 960441739}
+  - component: {fileID: 960441738}
+  m_Layer: 0
+  m_Name: Global Volume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &960441738
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 960441737}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
+  m_IsGlobal: 1
+  priority: 0
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: ab09877e2e707104187f6f83e2f62510, type: 2}
+--- !u!4 &960441739
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 960441737}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 24.643932, y: 3.6365721, z: 20.888542}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1010577324
 GameObject:
   m_ObjectHideFlags: 0
@@ -1272,8 +1351,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 30, y: 1.45, z: 35}
-  m_LocalScale: {x: 0.7, y: 1.5, z: 0.7}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 0.49000004, y: 1.0500001, z: 0.49000004}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1299,84 +1378,84 @@ MonoBehaviour:
   waterDrag: 4
   fallbackVolumeFraction: 0.25
   localSamplePoints:
-  - {x: -0.26974076, y: -0.82685673, z: -0.2697393}
-  - {x: 0.000000016780877, y: -0.84379876, z: -0.3040936}
-  - {x: 0.26974082, y: -0.8268567, z: -0.2697393}
-  - {x: -0.28186288, y: -0.6243016, z: -0.28186145}
-  - {x: 0.00000001632785, y: -0.6243022, z: -0.32862768}
-  - {x: 0.281863, y: -0.6243017, z: -0.28186142}
-  - {x: -0.28186288, y: -0.37383565, z: -0.28186145}
-  - {x: 0.00000001632785, y: -0.37383637, z: -0.32862768}
-  - {x: 0.281863, y: -0.37383568, z: -0.28186142}
-  - {x: -0.28186288, y: -0.12336941, z: -0.28186145}
-  - {x: 0.00000001632785, y: -0.123369575, z: -0.32862768}
-  - {x: 0.281863, y: -0.123369426, z: -0.28186142}
-  - {x: -0.28186288, y: 0.12709685, z: -0.28186145}
-  - {x: 0.00000001632785, y: 0.12709704, z: -0.32862768}
-  - {x: 0.281863, y: 0.12709686, z: -0.28186142}
-  - {x: -0.28186288, y: 0.3775632, z: -0.28186145}
-  - {x: 0.00000001632785, y: 0.37756374, z: -0.32862768}
-  - {x: 0.281863, y: 0.3775632, z: -0.28186142}
-  - {x: -0.28186288, y: 0.6280292, z: -0.28186145}
-  - {x: 0.00000001632785, y: 0.6280299, z: -0.32862768}
-  - {x: 0.281863, y: 0.62802935, z: -0.28186142}
-  - {x: -0.2697408, y: 0.8305839, z: -0.2697393}
-  - {x: 0.000000016720602, y: 0.8475259, z: -0.3040936}
-  - {x: 0.2697408, y: 0.83058393, z: -0.26973933}
-  - {x: -0.30409485, y: -0.84379876, z: -0.000000003664789}
-  - {x: 0.00000001700255, y: -0.87098163, z: -0.000000008771157}
-  - {x: 0.3040949, y: -0.84379876, z: -0.0000000024110454}
-  - {x: -0.32862967, y: -0.62430215, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: -0.62430227, z: -0.0000000022223081}
-  - {x: 0.3286297, y: -0.6243022, z: -0.0000000022265245}
-  - {x: -0.32862967, y: -0.37383625, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: -0.3738364, z: -0.0000000022223081}
-  - {x: 0.3286297, y: -0.37383625, z: -0.0000000022265245}
-  - {x: -0.32862967, y: -0.12336955, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: -0.123369575, z: -0.0000000022223081}
-  - {x: 0.3286297, y: -0.12336955, z: -0.0000000022265245}
-  - {x: -0.32862967, y: 0.127097, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: 0.12709704, z: -0.0000000022223081}
-  - {x: 0.3286297, y: 0.127097, z: -0.0000000022265245}
-  - {x: -0.32862967, y: 0.37756374, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: 0.37756383, z: -0.0000000022223081}
-  - {x: 0.3286297, y: 0.37756374, z: -0.0000000022265245}
-  - {x: -0.32862967, y: 0.6280298, z: -0.0000000025638767}
-  - {x: 0.000000016732672, y: 0.62803, z: -0.0000000022223081}
-  - {x: 0.3286297, y: 0.6280298, z: -0.0000000022265245}
-  - {x: -0.3040948, y: 0.8475256, z: -0.0000000044242685}
-  - {x: 0.000000016935081, y: 0.8747091, z: 5.7349875e-10}
-  - {x: 0.30409485, y: 0.8475257, z: -0.0000000019408914}
-  - {x: -0.2697408, y: -0.8268566, z: 0.26973933}
-  - {x: 0.00000001716664, y: -0.84379846, z: 0.30409333}
-  - {x: 0.26974082, y: -0.8268566, z: 0.26973933}
-  - {x: -0.281863, y: -0.6243021, z: 0.28186148}
-  - {x: 0.00000001727243, y: -0.6243021, z: 0.32862782}
-  - {x: 0.28186303, y: -0.6243021, z: 0.28186148}
-  - {x: -0.281863, y: -0.3738357, z: 0.28186148}
-  - {x: 0.00000001727243, y: -0.3738361, z: 0.32862782}
-  - {x: 0.28186303, y: -0.37383574, z: 0.28186148}
-  - {x: -0.281863, y: -0.12336943, z: 0.28186148}
-  - {x: 0.00000001727243, y: -0.12336952, z: 0.32862782}
-  - {x: 0.28186303, y: -0.12336943, z: 0.28186148}
-  - {x: -0.281863, y: 0.12709688, z: 0.28186148}
-  - {x: 0.00000001727243, y: 0.12709698, z: 0.32862782}
-  - {x: 0.28186303, y: 0.12709688, z: 0.28186148}
-  - {x: -0.281863, y: 0.37756324, z: 0.28186148}
-  - {x: 0.00000001727243, y: 0.3775637, z: 0.32862782}
-  - {x: 0.28186303, y: 0.37756324, z: 0.28186148}
-  - {x: -0.281863, y: 0.6280294, z: 0.28186148}
-  - {x: 0.00000001727243, y: 0.6280296, z: 0.32862782}
-  - {x: 0.28186303, y: 0.6280294, z: 0.28186148}
-  - {x: -0.26974085, y: 0.83058393, z: 0.26973936}
-  - {x: 0.000000017070196, y: 0.84752566, z: 0.3040933}
-  - {x: 0.26974082, y: 0.8305839, z: 0.26973933}
+  - {x: -0.2697414, y: -0.82685643, z: -0.26973942}
+  - {x: 3.857664e-10, y: -0.8437976, z: -0.30409312}
+  - {x: 0.2697414, y: -0.8268563, z: -0.2697394}
+  - {x: -0.2818637, y: -0.62430215, z: -0.28186148}
+  - {x: 9.445823e-10, y: -0.62430096, z: -0.32862678}
+  - {x: 0.28186375, y: -0.62430215, z: -0.28186148}
+  - {x: -0.2818637, y: -0.3738358, z: -0.28186148}
+  - {x: 9.445823e-10, y: -0.37383524, z: -0.32862678}
+  - {x: 0.28186375, y: -0.37383583, z: -0.28186148}
+  - {x: -0.2818637, y: -0.12336941, z: -0.28186148}
+  - {x: 9.445823e-10, y: -0.12336925, z: -0.32862678}
+  - {x: 0.28186375, y: -0.123369426, z: -0.28186148}
+  - {x: -0.2818637, y: 0.12709685, z: -0.28186148}
+  - {x: 9.445823e-10, y: 0.12709667, z: -0.32862678}
+  - {x: 0.28186375, y: 0.12709686, z: -0.28186148}
+  - {x: -0.2818637, y: 0.37756318, z: -0.28186148}
+  - {x: 9.445823e-10, y: 0.37756255, z: -0.32862678}
+  - {x: 0.28186375, y: 0.37756318, z: -0.28186148}
+  - {x: -0.2818637, y: 0.62802964, z: -0.28186148}
+  - {x: 9.445823e-10, y: 0.6280291, z: -0.32862678}
+  - {x: 0.28186375, y: 0.62802964, z: -0.28186148}
+  - {x: -0.26974142, y: 0.8305839, z: -0.26973936}
+  - {x: 2.049384e-10, y: 0.8475249, z: -0.3040931}
+  - {x: 0.2697414, y: 0.8305837, z: -0.26973933}
+  - {x: -0.30409557, y: -0.8437977, z: 0.0000000036647811}
+  - {x: 0, y: -0.87097985, z: 0.000000007421719}
+  - {x: 0.3040956, y: -0.8437977, z: 0.000000004629197}
+  - {x: -0.32862976, y: -0.6243012, z: 4.0482107e-10}
+  - {x: 0, y: -0.62430096, z: 9.15064e-10}
+  - {x: 0.32862976, y: -0.62430125, z: 5.3976146e-10}
+  - {x: -0.32862976, y: -0.37383538, z: 4.0482107e-10}
+  - {x: 0, y: -0.37383533, z: 9.15064e-10}
+  - {x: 0.32862976, y: -0.37383536, z: 5.3976146e-10}
+  - {x: -0.32862976, y: -0.123369284, z: 4.0482107e-10}
+  - {x: 0, y: -0.12336923, z: 9.15064e-10}
+  - {x: 0.32862976, y: -0.12336927, z: 5.3976146e-10}
+  - {x: -0.32862976, y: 0.12709671, z: 4.0482107e-10}
+  - {x: 0, y: 0.12709668, z: 9.15064e-10}
+  - {x: 0.32862976, y: 0.12709671, z: 5.3976146e-10}
+  - {x: -0.32862976, y: 0.37756267, z: 4.0482107e-10}
+  - {x: 0, y: 0.37756255, z: 9.15064e-10}
+  - {x: 0.32862976, y: 0.37756267, z: 5.3976146e-10}
+  - {x: -0.32862976, y: 0.6280292, z: 4.0482107e-10}
+  - {x: 0, y: 0.62802917, z: 9.15064e-10}
+  - {x: 0.32862976, y: 0.6280292, z: 5.3976146e-10}
+  - {x: -0.3040956, y: 0.84752476, z: 0.000000009125787}
+  - {x: -2.361456e-10, y: 0.8747071, z: 3.7108597e-10}
+  - {x: 0.30409563, y: 0.8475248, z: 0.000000006063767}
+  - {x: -0.26974136, y: -0.8268562, z: 0.26973924}
+  - {x: 9.6441626e-11, y: -0.84379786, z: 0.3040932}
+  - {x: 0.26974136, y: -0.8268562, z: 0.26973924}
+  - {x: -0.28186387, y: -0.6243022, z: 0.2818615}
+  - {x: -6.74702e-11, y: -0.6243015, z: 0.32862753}
+  - {x: 0.2818639, y: -0.62430227, z: 0.28186154}
+  - {x: -0.28186387, y: -0.37383583, z: 0.2818615}
+  - {x: -6.74702e-11, y: -0.3738355, z: 0.32862753}
+  - {x: 0.2818639, y: -0.37383586, z: 0.28186154}
+  - {x: -0.28186387, y: -0.12336943, z: 0.2818615}
+  - {x: -6.74702e-11, y: -0.123369314, z: 0.32862753}
+  - {x: 0.2818639, y: -0.12336945, z: 0.28186154}
+  - {x: -0.28186387, y: 0.12709689, z: 0.2818615}
+  - {x: -6.74702e-11, y: 0.12709676, z: 0.32862753}
+  - {x: 0.2818639, y: 0.12709689, z: 0.28186154}
+  - {x: -0.28186387, y: 0.3775632, z: 0.2818615}
+  - {x: -6.74702e-11, y: 0.3775628, z: 0.32862753}
+  - {x: 0.2818639, y: 0.37756324, z: 0.28186154}
+  - {x: -0.28186387, y: 0.6280296, z: 0.2818615}
+  - {x: -6.74702e-11, y: 0.6280294, z: 0.32862753}
+  - {x: 0.2818639, y: 0.6280296, z: 0.28186154}
+  - {x: -0.26974142, y: 0.83058363, z: 0.2697392}
+  - {x: -1.9288329e-10, y: 0.8475252, z: 0.30409324}
+  - {x: 0.26974145, y: 0.8305837, z: 0.2697392}
   localSamplingBounds:
     m_Center: {x: 0, y: 0.001863718, z: 0}
-    m_Extent: {x: 0.50000054, y: 1.0018651, z: 0.4999978}
-  localSampleCellSize: {x: 0.3333337, y: 0.2504663, z: 0.33333185}
-  localSampleVolume: 0.027829494
-  estimatedLocalVolume: 1.4399586
+    m_Extent: {x: 0.50000167, y: 1.0018649, z: 0.49999776}
+  localSampleCellSize: {x: 0.33333445, y: 0.25046623, z: 0.33333185}
+  localSampleVolume: 0.02782955
+  estimatedLocalVolume: 1.4399629
 --- !u!54 &1016855927
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1404,6 +1483,11 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!4 &1228120636 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1344389666738917095, guid: c40622a1091bdfa488ad50c7c70e0d72, type: 3}
+  m_PrefabInstance: {fileID: 313456430}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1252512605
 GameObject:
   m_ObjectHideFlags: 0
@@ -1416,6 +1500,7 @@ GameObject:
   - component: {fileID: 1252512608}
   - component: {fileID: 1252512607}
   - component: {fileID: 1252512606}
+  - component: {fileID: 1252512610}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1446,7 +1531,7 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
+  m_RenderPostProcessing: 1
   m_Antialiasing: 0
   m_AntialiasingQuality: 2
   m_StopNaN: 0
@@ -1541,6 +1626,38 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1252512610
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1252512605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f50527de3e6c42b084193c8ec32eef92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean.BoatInput::WaterSystem.Ocean.ShipThirdPersonCamera
+  target: {fileID: 1228120636}
+  focusHeight: 1.5
+  distance: 10
+  minimumDistance: 4
+  maximumDistance: 20
+  pitch: 15
+  minimumPitch: 5
+  maximumPitch: 65
+  horizontalSmoothTime: 0.12
+  verticalSmoothTime: 0.35
+  headingSmoothTime: 0.25
+  pitchSmoothTime: 0.12
+  zoomSmoothTime: 0.15
+  teleportDistance: 30
+  mouseDegreesPerPixel: 0.16
+  gamepadDegreesPerSecond: 100
+  scrollDistancePerUnit: 0.015
+  autoRecenter: 1
+  recenterDelay: 2
+  recenterDegreesPerSecond: 55
 --- !u!1 &1351787626
 GameObject:
   m_ObjectHideFlags: 0
@@ -1653,6 +1770,133 @@ Transform:
   m_Children: []
   m_Father: {fileID: 458639858}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1555344611
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1555344612}
+  - component: {fileID: 1555344614}
+  - component: {fileID: 1555344613}
+  m_Layer: 0
+  m_Name: Point Light
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1555344612
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1555344611}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.42699814, y: 2.52, z: -0.8540001}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1228120636}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1555344613
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1555344611}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
+--- !u!108 &1555344614
+Light:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1555344611}
+  m_Enabled: 1
+  serializedVersion: 13
+  m_Type: 2
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Intensity: 3.63
+  m_Range: 10
+  m_SpotAngle: 30
+  m_InnerSpotAngle: 21.80208
+  m_CookieSize2D: {x: 0.5, y: 0.5}
+  m_Shadows:
+    m_Type: 0
+    m_Resolution: -1
+    m_CustomResolution: -1
+    m_Strength: 1
+    m_Bias: 0.05
+    m_NormalBias: 0.4
+    m_NearPlane: 0.2
+    m_CullingMatrixOverride:
+      e00: 1
+      e01: 0
+      e02: 0
+      e03: 0
+      e10: 0
+      e11: 1
+      e12: 0
+      e13: 0
+      e20: 0
+      e21: 0
+      e22: 1
+      e23: 0
+      e30: 0
+      e31: 0
+      e32: 0
+      e33: 1
+    m_UseCullingMatrixOverride: 0
+  m_Cookie: {fileID: 0}
+  m_DrawHalo: 0
+  m_Flare: {fileID: 0}
+  m_RenderMode: 0
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingLayerMask: 1
+  m_Lightmapping: 2
+  m_LightShadowCasterMode: 0
+  m_AreaSize: {x: 1, y: 1}
+  m_BounceIntensity: 1
+  m_ColorTemperature: 6570
+  m_UseColorTemperature: 0
+  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_UseBoundingSphereOverride: 0
+  m_UseViewFrustumForShadowCasterCull: 1
+  m_ForceVisible: 0
+  m_ShapeRadius: 0.025
+  m_ShadowAngle: 0
+  m_LightUnit: 1
+  m_LuxAtDistance: 1
+  m_EnableSpotReflector: 1
 --- !u!1 &1855824879
 GameObject:
   m_ObjectHideFlags: 0
@@ -1778,6 +2022,7 @@ GameObject:
   - component: {fileID: 1950571328}
   - component: {fileID: 1950571327}
   - component: {fileID: 1950571331}
+  - component: {fileID: 1950571332}
   m_Layer: 0
   m_Name: FFT Ocean
   m_TagString: Untagged
@@ -1844,13 +2089,13 @@ MonoBehaviour:
   timeOffset: 0
   loopPeriod: 0
   heightScale: 3.97
-  choppiness: -1.97
-  normalStrength: 3
+  choppiness: -1.82
+  normalStrength: 1
   maximumDisplacement: {x: 5, y: 15}
-  foamThreshold: 0.595
-  foamSoftness: 1.66
-  foamDecay: 1.8
-  foamBuildRate: 3.47
+  foamThreshold: 0.5
+  foamSoftness: 1.38
+  foamDecay: 1.99
+  foamBuildRate: 1
 --- !u!114 &1950571329
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1923,6 +2168,24 @@ MonoBehaviour:
     CausticStrength: 0.6
     CausticDepth: 18
     UseSceneTextures: 1
+  Night:
+    Enabled: 1
+    Automatic: 1
+    ManualBlend: 1
+    FadeStartElevation: -2
+    FullNightElevation: -12
+    DeepColor: {r: 0.018, g: 0.065, b: 0.18, a: 1}
+    ShallowColor: {r: 0.025, g: 0.2, b: 0.34, a: 1}
+    HorizonColor: {r: 0.055, g: 0.14, b: 0.29, a: 1}
+    AmbientIntensity: 2
+    ReflectionFill: 0.633
+    MoonLightIntensity: 0.06
+    MoonTint: {r: 0.6, g: 0.78, b: 1, a: 1}
+    MoonRoughness: 0.26
+    FoamColor: {r: 0.04, g: 0.65, b: 1, a: 1}
+    FoamEmission: 6
+    FoamDetail: 0.65
+    FoamResponse: 0.7
   Underwater:
     Enabled: 1
     ScatteringColor: {r: 0.008, g: 0.12, b: 0.16, a: 1}
@@ -1934,9 +2197,9 @@ MonoBehaviour:
     RefractiveIndex: 1.333
     CausticStrength: 0.4
     CausticDepth: 20
-    FlowSpeed: 0.25
+    FlowSpeed: 0.4
     DistortionStrength: 0.011
-    DistortionWaveWeight: 0.13
+    DistortionWaveWeight: 0.33
     DistortionFlowWeight: 0.45
     DistortionDistance: 25
     DistortionScale: 0.008
@@ -2007,6 +2270,173 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanSurfaceQuerySystem
   queryShader: {fileID: 7200000, guid: 71d1bd711adc57f4da4432c8091ae1d0, type: 3}
+--- !u!114 &1950571332
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1950571326}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8acaa50cb8f94696a5f35ef97c50cc2a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanWakeSystem
+  DecayPerSecond: 0.22
+--- !u!1 &2123623095
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2123623097}
+  - component: {fileID: 2123623096}
+  m_Layer: 0
+  m_Name: Atmosphere
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2123623096
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2123623095}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb6c852ea6bdc425f9a03c2720828645, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.AtmosphereRenderer
+  Sun: {fileID: 265525050}
+  Ocean: {fileID: 1950571329}
+  SeaLevel: 0
+  Atmosphere:
+    PlanetRadius: 6360
+    AtmosphereHeight: 100
+    RayleighScattering: {x: 5.802, y: 13.558, z: 33.1}
+    RayleighDensity: 1
+    RayleighScaleHeight: 8
+    MieScattering: 3.996
+    MieAbsorption: 4.4
+    MieDensity: 2.72
+    MieAnisotropy: 0.89
+    MieScaleHeight: 1.2
+    OzoneAbsorption: {x: 0.65, y: 1.881, z: 0.085}
+    OzoneDensity: 1
+    OzoneLayerCenter: 25
+    OzoneLayerWidth: 15
+    SunColor: {r: 1, g: 1, b: 1, a: 1}
+    SunIntensity: 3.15
+    SunDiscScale: 2.51
+    Exposure: 1.8315225
+    AerialPerspectiveScale: 1
+    MaxAerialDistance: 200
+    GroundAlbedo: {r: 0.08, g: 0.1, b: 0.12, a: 1}
+    NightSky: {r: 0.029799, g: 0.022368552, b: 0.24528301, a: 1}
+  Clouds:
+    Enabled: 1
+    BottomAltitude: 1500
+    Thickness: 2600
+    Coverage: 0.448
+    CloudType: 0.6
+    TypeVariation: 0.7
+    WeatherScale: 40
+    WeatherDetail: 4
+    CoverageSoftness: 0.18
+    EvolutionSpeed: 1
+    Precipitation: 0.35
+    FollowOceanWind: 1
+    OceanWindMultiplier: 2.5
+    WindDirection: {x: 1, y: 0.35}
+    WindSpeed: 15
+    WindShear: 0.6
+    ShapeScale: 7000
+    DetailScale: 900
+    DetailStrength: 0.4
+    Extinction: 0.045
+    Albedo: 0.839
+    ForwardScattering: 0.75
+    BackScattering: -0.3
+    PhaseBlend: 0.35
+    AmbientStrength: 1.2
+    PowderStrength: 0.4
+    MultiScatteringAttenuation: 0.5
+    MultiScatteringContribution: 0.5
+    MultiScatteringPhaseDecay: 0.5
+    WetnessDarkening: 0.6
+    Downsample: 2
+    MaxSteps: 128
+    LightStepLength: 35
+    MaxDistance: 90000
+    StepGrowth: 0.2
+    TemporalBlend: 0.9
+    CastShadows: 1
+    ShadowStrength: 0.9
+    ShadowExtent: 24000
+    ShadowResolution: 1024
+    SunLightCookie: 1
+    ReflectionResolution: 128
+  NightSky:
+    Enabled: 1
+    GalaxyTexture: {fileID: 0}
+    GalaxyIntensity: 0.35
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Rotation: {x: 15, y: 0, z: 25}
+    StarIntensity: 3
+    StarDensity: 0.2
+    StarSize: 1
+    TwinkleStrength: 0.18
+    FadeStartElevation: -3
+    FullNightElevation: -15
+    HorizonFade: 4
+    AutomaticRotation: 1
+    RotationPeriodMinutes: 1440
+  Moon:
+    Enabled: 1
+    FollowSun: 1
+    Azimuth: 0
+    Elevation: 43
+    SurfaceTexture: {fileID: 0}
+    AngularDiameter: 2.7
+    Brightness: 3.13
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    TextureRotation: 0
+    Phase: 0.482
+    HaloIntensity: 0.95
+    HaloRadius: 4.6
+    HaloFalloff: 2.7
+    CloudLightIntensity: 1.65
+  Lighting:
+    DriveSunLight: 1
+    DriveAmbient: 1
+    AmbientIntensity: 1
+    MinimumAmbient: {r: 0.01, g: 0.012, b: 0.02, a: 1}
+    DriveReflections: 1
+    DriveSkybox: 1
+    DisableUnityFog: 1
+    ApplyAerialPerspective: 1
+  TargetCamera: {fileID: 0}
+  ShowInSceneView: 1
+--- !u!4 &2123623097
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2123623095}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -2019,3 +2449,5 @@ SceneRoots:
   - {fileID: 98866384}
   - {fileID: 458639858}
   - {fileID: 313456430}
+  - {fileID: 960441739}
+  - {fileID: 2123623097}

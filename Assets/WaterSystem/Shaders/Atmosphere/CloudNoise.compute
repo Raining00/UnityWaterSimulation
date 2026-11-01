@@ -1,0 +1,138 @@
+// Tileable procedural noise for the cloud layer: 3D shape and detail textures generated once,
+// and a 2D weather map (coverage, type, wetness) that evolves every frame.
+#pragma kernel ShapeNoise
+#pragma kernel DetailNoise
+#pragma kernel WeatherMap
+
+RWTexture3D<float4> _ShapeOutput;
+RWTexture3D<float4> _DetailOutput;
+RWTexture2D<float4> _WeatherOutput;
+float4 _NoiseSize;      // x shape resolution, y detail resolution, z weather resolution
+float4 _WeatherParams;  // x coverage, y type bias, z type variation, w detail frequency (cells per map)
+float4 _WeatherTime;    // x evolution time, y precipitation, z coverage softness, w unused
+
+float3 Hash33(float3 p)
+{
+    p = frac(p * float3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return frac((p.xxy + p.yxx) * p.zyx);
+}
+float Hash31(float3 p)
+{
+    p = frac(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return frac((p.x + p.y) * p.z);
+}
+// Worley noise tiling over [0,1)^3 with 'cells' feature cells per axis. Returns the nearest feature distance.
+float Worley3D(float3 p, float cells)
+{
+    float3 pc = p * cells;
+    float3 cell = floor(pc);
+    float3 f = pc - cell;
+    float minDistance = 1e9;
+    for (int z = -1; z <= 1; z++)
+    for (int y = -1; y <= 1; y++)
+    for (int x = -1; x <= 1; x++)
+    {
+        float3 n = float3(x, y, z);
+        float3 c = cell + n;
+        c = c - cells * floor(c / cells); // wrap
+        float3 feature = Hash33(c) + n;
+        float3 d = f - feature;
+        minDistance = min(minDistance, dot(d, d));
+    }
+    return saturate(sqrt(minDistance));
+}
+float WorleyFbm(float3 p, float cells)
+{
+    return (1.0 - Worley3D(p, cells)) * 0.625 + (1.0 - Worley3D(p, cells * 2.0)) * 0.25 + (1.0 - Worley3D(p, cells * 4.0)) * 0.125;
+}
+// Gradient noise tiling over [0,1)^3 with 'cells' lattice cells per axis, output in [0,1].
+float Perlin3D(float3 p, float cells)
+{
+    float3 pc = p * cells;
+    float3 cell = floor(pc);
+    float3 f = pc - cell;
+    float3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float result = 0.0;
+    float corners[8];
+    for (int i = 0; i < 8; i++)
+    {
+        float3 corner = float3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        float3 c = cell + corner;
+        c = c - cells * floor(c / cells);
+        float3 gradient = normalize(Hash33(c) * 2.0 - 1.0);
+        corners[i] = dot(gradient, f - corner);
+    }
+    float x0 = lerp(corners[0], corners[1], u.x), x1 = lerp(corners[2], corners[3], u.x);
+    float x2 = lerp(corners[4], corners[5], u.x), x3 = lerp(corners[6], corners[7], u.x);
+    float y0 = lerp(x0, x1, u.y), y1 = lerp(x2, x3, u.y);
+    result = lerp(y0, y1, u.z);
+    return saturate(result * 0.75 + 0.5);
+}
+float PerlinFbm(float3 p, float cells, int octaves)
+{
+    float sum = 0.0, amplitude = 1.0, total = 0.0;
+    for (int i = 0; i < octaves; i++)
+    {
+        sum += Perlin3D(p, cells) * amplitude;
+        total += amplitude;
+        amplitude *= 0.5;
+        cells *= 2.0;
+    }
+    return sum / total;
+}
+float Remap(float value, float low0, float high0, float low1, float high1)
+{
+    return low1 + (value - low0) * (high1 - low1) / max(high0 - low0, 1e-5);
+}
+
+[numthreads(4,4,4)]
+void ShapeNoise(uint3 id : SV_DispatchThreadID)
+{
+    uint size = (uint)_NoiseSize.x;
+    if (any(id >= size)) return;
+    float3 p = (id + 0.5) / _NoiseSize.x;
+    float perlin = PerlinFbm(p, 4.0, 3);
+    float worley = WorleyFbm(p, 8.0);
+    // Perlin-Worley: dilate the billowy Perlin field with Worley cells.
+    float perlinWorley = saturate(Remap(perlin, 0.0, 1.0, worley, 1.0));
+    float g = WorleyFbm(p, 4.0);
+    float b = WorleyFbm(p, 8.0);
+    float a = WorleyFbm(p, 16.0);
+    _ShapeOutput[id] = float4(perlinWorley, g, b, a);
+}
+
+[numthreads(4,4,4)]
+void DetailNoise(uint3 id : SV_DispatchThreadID)
+{
+    uint size = (uint)_NoiseSize.y;
+    if (any(id >= size)) return;
+    float3 p = (id + 0.5) / _NoiseSize.y;
+    _DetailOutput[id] = float4(WorleyFbm(p, 2.0), WorleyFbm(p, 4.0), WorleyFbm(p, 8.0), 1);
+}
+
+// Weather map tiling over the layer footprint: coverage (R), cloud type (G), wetness (B).
+[numthreads(8,8,1)]
+void WeatherMap(uint3 id : SV_DispatchThreadID)
+{
+    uint size = (uint)_NoiseSize.z;
+    if (id.x >= size || id.y >= size) return;
+    float2 uv = (id.xy + 0.5) / _NoiseSize.z;
+    float cells = max(1.0, _WeatherParams.w);
+    // The third coordinate evolves the field over time so clouds form and dissipate.
+    float3 p = float3(uv, _WeatherTime.x * 0.02);
+    float coverageNoise = PerlinFbm(p, cells, 4);
+    float largeScale = PerlinFbm(p + 0.5, max(1.0, cells * 0.5), 2);
+    coverageNoise = coverageNoise * 0.7 + largeScale * 0.3;
+    float coverage = _WeatherParams.x;
+    float softness = max(0.02, _WeatherTime.z);
+    float threshold = 1.0 - coverage;
+    float c = smoothstep(threshold - softness, threshold + softness, coverageNoise);
+    c *= saturate(Remap(coverageNoise, threshold - softness, 1.0, 0.0, 1.0)) * 0.5 + 0.5;
+    c = saturate(c * lerp(0.4, 1.0, coverage));
+    float typeNoise = PerlinFbm(float3(uv + 0.37, _WeatherTime.x * 0.01), max(1.0, cells * 0.75), 3);
+    float type = saturate(lerp(_WeatherParams.y, typeNoise, _WeatherParams.z) + (coverageNoise - 0.5) * 0.4 * _WeatherParams.z);
+    float wetness = saturate((c - 0.45) * 2.0) * _WeatherTime.y;
+    _WeatherOutput[id.xy] = float4(c, type, wetness, 1);
+}

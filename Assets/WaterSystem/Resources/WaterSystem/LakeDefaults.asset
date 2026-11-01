@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3d6370d0a32451896596ab64e31e34a, type: 3}
+  m_Name: LakeDefaults
+  m_EditorClassIdentifier: 
+  SurfaceShader: {fileID: 4800000, guid: f48f9e390ee64b249cb1c6eebdfbbca7, type: 3}
+  NormalMap: {fileID: 2800000, guid: 98623ae5815747a8b51e65b51135d71a, type: 3}
+  FoamMask: {fileID: 2800000, guid: b355dc3353264cff869ebd00595a9c01, type: 3}
+  FoamNormal: {fileID: 2800000, guid: a9fa27bef69f40d9a348bed3152d62f6, type: 3}

@@ -1,33 +1,40 @@
 # Water System
 
-A Unity URP ocean system combining GPU wave simulation with realistic and stylized rendering.
+A Unity URP ocean project with FFT waves, realistic and stylized water, atmospheric skies, and buoyant vehicles.
 
-## Overview
+- **Ocean:** Animated FFT waves, an expansive horizon, reflections, refraction, foam, and caustics.
+- **Underwater:** Submerged views, waterline transitions, underwater haze, and sunlight shafts.
+- **Atmosphere:** Volumetric clouds and changing sky and ocean colors from noon to sunset.
+- **Night:** Stars, the Milky Way, a textured moon, moonlight on the sea, and bioluminescent foam.
+- **Interaction:** Floating rigid bodies, boat buoyancy, powered navigation, and surface wakes.
 
-- **FFT simulation:** Multi-cascade wave spectra, GPU inverse FFT, displacement, normals, and wave-breaking foam.
-- **Ocean geometry:** Camera-driven quadtree LOD, instanced mesh patches, and an extended horizon.
-- **Realistic rendering:** Water absorption and scattering, reflections, depth-based refraction, foam, caustics, and GPU spray particles.
-- **Underwater (realistic mode):** RGB absorption, distance fog, FFT waterline transitions, underwater caustics, and water-to-air refraction.
-- **Stylized rendering:** Turquoise-to-deep-blue water colors, scrolling detail normals, soft reflections, and depth-based shoreline foam.
+## Gallery
 
-Both rendering modes share the same simulation. Appearance settings are controlled through the Ocean component or C#.
+Captured in Unity from the current **DeepOceanDemo** scene, including its water, atmosphere, and night settings.
 
-## Getting Started
-
-Open the project with **Unity 6000.5.7f1** and **URP 17.5**. Try [DeepOceanDemo](Assets/WaterSystem/Demo/DeepOceanDemo.unity) or [StylizedOceanDemo](Assets/WaterSystem/Demo/StylizedOceanDemo.unity).
-
-To create an ocean, add `OceanRenderer` to a GameObject. Its simulation components are connected automatically. Choose **Physical** or **Stylized** under **Shading Mode**. Enable the camera's depth and opaque textures for refraction and shoreline effects.
-
-Try [UnderwaterDemo](Assets/WaterSystem/Demo/UnderwaterDemo.unity) for an automatic dive preview.
-
-## Realistic Rendering
-
-![Realistic ocean — overview](img/1.gif)
-
-![Realistic ocean — waves](img/2.gif)
-
-![Realistic ocean — surface detail](img/3.gif)
-
-## Stylized Rendering
-
-![Stylized ocean](img/4.gif)
+<table>
+  <tr>
+    <td width="50%"><img src="img/gallery/ocean-fft.jpg" alt="FFT ocean waves and reflections" width="100%"><br><strong>FFT Ocean</strong></td>
+    <td width="50%"><img src="img/gallery/ocean-stylized.jpg" alt="Stylized ocean rendering" width="100%"><br><strong>Stylized Water</strong></td>
+  </tr>
+  <tr>
+    <td><img src="img/gallery/underwater.jpg" alt="Underwater rendering with caustics and haze" width="100%"><br><strong>Underwater</strong></td>
+    <td><img src="img/gallery/underwater-surface.jpg" alt="The ocean surface viewed from below" width="100%"><br><strong>Beneath the Surface</strong></td>
+  </tr>
+  <tr>
+    <td><img src="img/gallery/atmosphere-noon.jpg" alt="Noon sky and volumetric clouds" width="100%"><br><strong>Noon</strong></td>
+    <td><img src="img/gallery/atmosphere-sunset.jpg" alt="Warm sunset sky and ocean reflections" width="100%"><br><strong>Sunset</strong></td>
+  </tr>
+  <tr>
+    <td><img src="img/gallery/night-sky.jpg" alt="Stars and moon in the night sky" width="100%"><br><strong>Stars and Moon</strong></td>
+    <td><img src="img/gallery/night-milky-way.jpg" alt="Milky Way above the ocean" width="100%"><br><strong>Milky Way</strong></td>
+  </tr>
+  <tr>
+    <td><img src="img/gallery/night-moonlight.jpg" alt="Moonlight reflected on ocean waves" width="100%"><br><strong>Moonlit Sea</strong></td>
+    <td><img src="img/gallery/night-ocean.jpg" alt="Blue night ocean with glowing foam" width="100%"><br><strong>Bioluminescent Ocean</strong></td>
+  </tr>
+  <tr>
+    <td><img src="img/gallery/buoyancy.gif" alt="Rigid bodies entering the water and floating" width="100%"><br><strong>Buoyancy</strong></td>
+    <td><img src="img/gallery/vehicle.gif" alt="Boat navigation and surface wakes" width="100%"><br><strong>Boat Navigation</strong></td>
+  </tr>
+</table>

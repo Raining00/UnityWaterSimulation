@@ -2,6 +2,14 @@ Shader "WaterSystem/Ocean"
 {
     Properties
     {
+        [HideInInspector] _OceanNightControl ("Night control", Vector) = (1,1,1,0.7)
+        [HideInInspector] _OceanNightTransition ("Night fade and fill", Vector) = (-0.0348995,-0.207912,0.85,0.35)
+        [HideInInspector] _OceanNightLighting ("Moon and fluorescence", Vector) = (0.06,0.26,6,0.65)
+        [HideInInspector] _OceanNightMoonTint ("Moon surface tint", Color) = (0.60,0.78,1,1)
+        [HideInInspector] _OceanNightDeep ("Night deep", Color) = (0.018,0.065,0.18,1)
+        [HideInInspector] _OceanNightShallow ("Night shallow", Color) = (0.025,0.20,0.34,1)
+        [HideInInspector] _OceanNightHorizon ("Night horizon", Color) = (0.055,0.14,0.29,1)
+        [HideInInspector][HDR] _OceanNightGlow ("Foam emission color", Color) = (0.04,0.65,1,1)
         _DeepColor ("Deep water scattering", Color) = (0.006,0.09,0.12,1)
         _ShallowColor ("Lit water scattering", Color) = (0.035,0.38,0.32,1)
         _Absorption ("RGB absorption per metre", Vector) = (0.22,0.065,0.035,0)
@@ -48,6 +56,7 @@ Shader "WaterSystem/Ocean"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
+            #include "OceanNightCommon.hlsl"
 
             TEXTURE2D_ARRAY(_OceanDisplacement); SAMPLER(sampler_OceanDisplacement);
             TEXTURE2D_ARRAY(_OceanNormals); SAMPLER(sampler_OceanNormals);
@@ -68,7 +77,10 @@ Shader "WaterSystem/Ocean"
                 float _CausticDepth, _UseSceneTextures;
                 float _UnderwaterEnabled, _UnderwaterIOR;
                 float4 _UnderwaterScatter;
+                OCEAN_NIGHT_MATERIAL_FIELDS
             CBUFFER_END
+            #define OCEAN_NIGHT_FUNCTIONS 1
+            #include "OceanNightCommon.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float2 horizon : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
             float WaveWeight(float2 baseXZ)
@@ -160,6 +172,11 @@ Shader "WaterSystem/Ocean"
                 float g = (nl / max(nl*(1-k)+k,1e-4)) * (nv / max(nv*(1-k)+k,1e-4));
                 return min(30, d*g*Fresnel(dot(v,h)) / max(4*nv,1e-4));
             }
+            float3 OceanAtmosphereReflection(float3 direction, float roughness)
+            {
+                float mip = roughness * (1.7 - 0.7 * roughness) * _AtmosphereSkyReflectionParams.x;
+                return SAMPLE_TEXTURECUBE_LOD(_AtmosphereSkyReflection, sampler_AtmosphereSkyReflection, direction, mip).rgb;
+            }
             struct FragmentOutput { half4 color : SV_Target; float depth : SV_Depth; };
             FragmentOutput OceanFragment(Varyings input, FRONT_FACE_TYPE frontFace : FRONT_FACE_SEMANTIC)
             {
@@ -201,6 +218,7 @@ Shader "WaterSystem/Ocean"
                 // Evaluate derivatives before the varying horizon branch; the FFT arrays have no mips.
                 float2 baseFootprint=max(abs(ddx(baseXZ)),abs(ddy(baseXZ)));
                 float distanceToCamera = distance(positionWS,_WorldSpaceCameraPos);
+                float night = OceanNightAmount(GetMainLight().direction);
                 if (_OceanSimulationReady != 0 && waveWeight>0)
                 {
                     [loop] for (int i=0; i<_FFTCascadeCount; i++)
@@ -211,7 +229,7 @@ Shader "WaterSystem/Ocean"
                         float2 footprint = baseFootprint / _OceanDomainSizes[i];
                         float detail = 1 / (1+max(footprint.x,footprint.y)*_FFTResolution);
                         slope += -sampleNormal.xz / max(sampleNormal.y,0.15) * detail;
-                        float f = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,uv,i,0).r;
+                        float f = OceanNightSampleFoam(uv,i,night);
                         foam = 1-(1-foam)*(1-f);
                     }
                 }
@@ -230,11 +248,23 @@ Shader "WaterSystem/Ocean"
                 float3 v = GetWorldSpaceNormalizeViewDir(positionWS);
                 float NoV = saturate(dot(n,v));
                 // Shadow coordinates and reflection probes lose useful precision tens of kilometres
-                // from the origin. The analytical far surface uses stable unshadowed sun/fallback sky.
+                // from the origin. The analytical far surface uses stable unshadowed sun.
                 Light sun;
                 if(analyticalHorizon)sun=GetMainLight();
                 else sun=GetMainLight(TransformWorldToShadowCoord(positionWS));
                 float sunlight = sun.shadowAttenuation * sun.distanceAttenuation;
+                float3 moonDirection = OceanMoonDirection();
+                float3 moonLight = OceanMoonLight(night);
+                // bool atmosphereActive = AtmosphereEnabled() && _AtmosphereSkyReflectionParams.x > 0;
+                // if (atmosphereActive)
+                //     sunlight *= smoothstep(-0.02, 0.05, _AtmosphereSun.y);
+                // else
+                sunlight *= lerp(1.0,smoothstep(-0.02,0.05,sun.direction.y),night);
+                sunlight *= 1-night;
+                // Scene ambient tracks the physical sky at night. The legacy constants remain
+                // available for ocean-only scenes without an atmosphere component.
+                // float3 skyAmbient = atmosphereActive ? max(SampleSH(float3(0, 1, 0)), 0.0) : 0.25;
+                float3 skyAmbient = 0.25;
                 float2 refractUV = screenUV;
                 float thickness = 80;
                 float3 background = _DeepColor.rgb;
@@ -263,7 +293,12 @@ Shader "WaterSystem/Ocean"
                 }
                 float3 transmittance = exp(-max(_Absorption.rgb,0.001)*thickness);
                 float3 scatterColor = lerp(_ShallowColor.rgb,_DeepColor.rgb,1-exp(-thickness*_Scattering));
+                scatterColor = lerp(scatterColor,OceanNightPalette(1-exp(-thickness*_Scattering)),night);
                 float3 lighting = 0.25 + sun.color*(0.35+0.65*saturate(sun.direction.y))*sunlight;
+                if (atmosphereActive)
+                    lighting = skyAmbient + sun.color * saturate(sun.direction.y) * sunlight;
+                lighting = lerp(lighting,_OceanNightTransition.z+skyAmbient*0.5,night);
+                lighting += moonLight*saturate(moonDirection.y)*0.35;
                 float3 refraction = background*transmittance + scatterColor*(1-transmittance)*lighting;
                 if (hasBottom && faceSign>0 && _CausticStrength>0)
                 {
@@ -278,16 +313,26 @@ Shader "WaterSystem/Ocean"
                 float3 r = reflect(-v,n);
                 float3 fallbackSky = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(r.y)));
                 float3 environment=fallbackSky;
-                if(!analyticalHorizon)
+                if (atmosphereActive)
+                {
+                    // A dark reflection is valid at night. Read the live atmosphere cubemap
+                    // directly, including at the horizon; local probes may still contain a day sky.
+                    environment = OceanAtmosphereReflection(r, _Roughness);
+                }
+                else if(!analyticalHorizon)
                 {
                     environment = GlossyEnvironmentReflection(r,_Roughness,1);
                     environment = lerp(fallbackSky,environment,saturate(dot(environment,float3(1,1,1))*5));
                 }
+                environment = OceanNightEnvironment(r,_Roughness,environment,night);
                 float fresnel = Fresnel(NoV);
                 float3 color = lerp(refraction,environment*_ReflectionStrength,fresnel);
                 color += sun.color*sunlight*GGX(n,v,sun.direction,_Roughness);
+                color += moonLight*GGX(n,v,moonDirection,max(_Roughness,_OceanNightLighting.y));
                 float backlight = pow(saturate(dot(v,-sun.direction)),5) * (1-NoV) * saturate(positionWS.y-_OceanOrigin.y+0.3);
                 color += _ShallowColor.rgb*sun.color*backlight*_SubsurfaceStrength*sunlight;
+                float moonBacklight = pow(saturate(dot(v,-moonDirection)),5)*(1-NoV)*saturate(positionWS.y-_OceanOrigin.y+0.3);
+                color += _OceanNightShallow.rgb*moonLight*moonBacklight*_SubsurfaceStrength;
                 if (faceSign<0 && _UnderwaterEnabled>0.5)
                 {
                     // Water -> air: Snell's window and total internal reflection beyond the critical angle.
@@ -303,6 +348,8 @@ Shader "WaterSystem/Ocean"
                         internalReflection = saturate((rs*rs+rp*rp)*0.5);
                         float3 airRay = refract(-v,n,_UnderwaterIOR);
                         transmittedColor = lerp(_SkyHorizon.rgb,_SkyZenith.rgb,sqrt(saturate(airRay.y)));
+                        if (atmosphereActive)
+                            transmittedColor = OceanAtmosphereReflection(airRay, 0.0);
                         // Screen-space above-water objects are approximate; rays outside the viewport use sky.
                         if (_UseSceneTextures>0.5 && !analyticalHorizon)
                         {
@@ -332,7 +379,12 @@ Shader "WaterSystem/Ocean"
                     float textureFoam = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+_OceanSimulationTime*float2(0.008,0.004),0).r;
                     float textureFoam2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-_OceanSimulationTime*float2(0.003,0.006),0).r;
                     foam *= smoothstep(0.15,0.8,(textureFoam+textureFoam2)*0.5);
-                    color = lerp(color,_FoamColor.rgb*(0.3+sun.color*saturate(dot(n,sun.direction))*sunlight),foam);
+                    float3 foamAmbient = atmosphereActive ? max(SampleSH(n), 0.0) : 0.3;
+                    float3 foamLighting = foamAmbient+sun.color*saturate(dot(n,sun.direction))*sunlight;
+                    foamLighting = lerp(foamLighting,foamAmbient+_OceanNightHorizon.rgb*0.15,night);
+                    foamLighting += moonLight*saturate(dot(n,moonDirection));
+                    color = lerp(color,_FoamColor.rgb*foamLighting,foam);
+                    color += OceanNightFoamEmission(foam,(textureFoam+textureFoam2)*0.5,baseFootprint,_FoamScale,night);
                 }
                 if (faceSign<0 && _UnderwaterEnabled<0.5)
                     color = lerp(color,_DeepColor.rgb,1-exp(-distanceToCamera*0.04));

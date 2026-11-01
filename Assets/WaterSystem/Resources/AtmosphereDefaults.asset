@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7c7ff538ed404bdd9a8e1f654ebbccb, type: 3}
+  m_Name: AtmosphereDefaults
+  m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.AtmosphereResources
+  AtmosphereLUT: {fileID: 7200000, guid: f2927fbaa822946819d21c76ba40bedd, type: 3}
+  CloudNoise: {fileID: 7200000, guid: 61e5597d98a844b29993a22f2dddc7f4, type: 3}
+  VolumetricClouds: {fileID: 7200000, guid: 23e9478ee81964084946bab0c762f00e, type: 3}
+  Skybox: {fileID: 4800000, guid: 84e03ffb1a9294708b34e982263fdd35, type: 3}
+  AerialPerspective: {fileID: 4800000, guid: 5d1568bdc96a848cb962ddd2e849d93c, type: 3}
+  CloudComposite: {fileID: 4800000, guid: 05fdc45840b7a46069925c99497b1463, type: 3}
