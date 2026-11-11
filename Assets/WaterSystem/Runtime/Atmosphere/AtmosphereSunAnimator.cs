@@ -34,20 +34,26 @@ namespace WaterSystem.Ocean
         {
             Vector3 direction = SunDirection(TimeOfDay, Latitude, Declination, NorthYaw);
             var rotation = Quaternion.LookRotation(-direction, Vector3.up);
-            // Only touch the transform when the result changes, so idle edit-mode updates leave the scene alone.
-            if (Quaternion.Angle(transform.rotation, rotation) > 0.001f) transform.rotation = rotation;
+            // Quaternion.Angle (and Quaternion ==) treats small rotations as equal. At a slow day
+            // speed this holds the sun, and the moon following it, for many frames before a jump.
+            // Compare components instead, allowing the q/-q equivalence and native rounding noise.
+            Quaternion current = transform.rotation;
+            var previous = new Vector4(current.x, current.y, current.z, current.w);
+            var next = new Vector4(rotation.x, rotation.y, rotation.z, rotation.w);
+            if (Mathf.Min((previous - next).sqrMagnitude, (previous + next).sqrMagnitude) > 1e-14f)
+                transform.rotation = rotation;
         }
         /// <summary>World direction towards the sun.</summary>
         public static Vector3 SunDirection(float hours, float latitude, float declination, float northYaw)
         {
             float hourAngle = (hours - 12) * 15 * Mathf.Deg2Rad;
             float lat = latitude * Mathf.Deg2Rad, dec = declination * Mathf.Deg2Rad;
-            float sinElevation = Mathf.Clamp(Mathf.Sin(lat) * Mathf.Sin(dec) + Mathf.Cos(lat) * Mathf.Cos(dec) * Mathf.Cos(hourAngle), -1, 1);
-            float elevation = Mathf.Asin(sinElevation);
-            float cosAzimuth = (Mathf.Sin(dec) - sinElevation * Mathf.Sin(lat)) / Mathf.Max(1e-5f, Mathf.Cos(elevation) * Mathf.Cos(lat));
-            float azimuth = Mathf.Acos(Mathf.Clamp(cosAzimuth, -1, 1));
-            if (hourAngle > 0) azimuth = 2 * Mathf.PI - azimuth;
-            var local = new Vector3(Mathf.Sin(azimuth) * Mathf.Cos(elevation), sinElevation, Mathf.Cos(azimuth) * Mathf.Cos(elevation));
+            // Direct east/up/north coordinates avoid the azimuth division and acos singularity
+            // when the sun crosses the zenith; the orbit is continuous through noon and midnight.
+            float cosDec = Mathf.Cos(dec), sinDec = Mathf.Sin(dec), cosHour = Mathf.Cos(hourAngle);
+            var local = new Vector3(-cosDec * Mathf.Sin(hourAngle),
+                Mathf.Sin(lat) * sinDec + Mathf.Cos(lat) * cosDec * cosHour,
+                Mathf.Cos(lat) * sinDec - Mathf.Sin(lat) * cosDec * cosHour);
             return Quaternion.Euler(0, northYaw, 0) * local;
         }
         /// <summary>Choose an afternoon time, latitude and north yaw that reproduce the light's current direction.</summary>

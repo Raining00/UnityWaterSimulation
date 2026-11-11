@@ -144,12 +144,16 @@ namespace WaterSystem.Ocean
 
             int start = nodes.Count;
             // Newest first: the live head, then the stored samples from young to old.
-            Vector2 newest = trail[trail.Count - 1].Position;
-            bool headDistinct = (newest - origin).sqrMagnitude > 0.01f * hullLength * hullLength;
-            if (headDistinct) nodes.Add(new WakeNode { Position = origin, Amplitude = strength, Breaking = strength * strength });
+            // The live head must follow every rendered pose, independently of stored-node spacing.
+            // A hull-relative distance threshold here freezes the whole Kelvin phase near each new
+            // sample, then jumps it forward when the hull has moved far enough.
+            nodes.Add(new WakeNode { Position = origin, Amplitude = strength, Breaking = strength * strength });
             for (int i = trail.Count - 1; i >= 0; i--)
             {
                 TrailNode sample = trail[i];
+                // On the exact frame a stored node is born it coincides with the live head.
+                // Skip only coincident neighbours, avoiding zero-length wedges without quantizing motion.
+                if ((sample.Position - nodes[nodes.Count - 1].Position).sqrMagnitude <= 1e-8f) continue;
                 float age = Mathf.Clamp01((time - sample.BirthTime) / Mathf.Max(1, WaveLifetime));
                 float fade = 1 - age * age * (3 - 2 * age);
                 // Only the first seconds of a wave are steep enough to spill.
