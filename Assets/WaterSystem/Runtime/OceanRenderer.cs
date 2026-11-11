@@ -55,6 +55,15 @@ namespace WaterSystem.Ocean
             }
         }
 
+        internal OceanWakeSystem Wake
+        {
+            get
+            {
+                if (wakeSystem == null) wakeSystem = GetComponent<OceanWakeSystem>();
+                return wakeSystem;
+            }
+        }
+
         public int LastLeafCount { get; private set; }
         public int LastVisibleCount { get; private set; }
         public int LastDrawCount { get; private set; }
@@ -111,6 +120,8 @@ namespace WaterSystem.Ocean
             properties.SetFloat("_OceanInfinite", InfiniteHorizon ? 1 : 0);
             properties.SetInt("_OceanSimulationReady", 0);
             if (activeSimulation != null && !simulationFailed) activeSimulation.BindResources(properties, camera);
+            // The waterline of the volume pass has to follow ship waves as well.
+            wakeSystem?.Bind(properties);
             Underwater.Bind(properties, Rendering);
             // Wall-clock time drives the flow distortion, so the wobble stays alive even when the
             // FFT is paused. Wave-slope detail still comes from _OceanSimulationTime via the textures.
@@ -134,6 +145,7 @@ namespace WaterSystem.Ocean
             properties.SetFloat("_OceanInfinite", InfiniteHorizon ? 1 : 0);
             properties.SetInt("_OceanSimulationReady", 0);
             if (activeSimulation != null && !simulationFailed) activeSimulation.BindResources(properties, camera);
+            wakeSystem?.Bind(properties);
             StylizedUnderwater.Bind(properties, Stylized, OceanResources.Load());
             properties.SetFloat("_UnderwaterTime", (float)Time.timeAsDouble);
             var sun = RenderSettings.sun;
@@ -331,7 +343,10 @@ namespace WaterSystem.Ocean
                 try { activeSimulation.BindResources(state.Properties, camera); }
                 catch (Exception exception) { FailSimulation(exception); }
             }
-            wakeSystem?.Bind(state.Properties);
+            // Ship waves need a few vertices per wavelength. Leaves grow with distance, so the
+            // displacement fades out between the distances where the vertex spacing passes 0.7 m and 2 m.
+            float wakeReach = Mathf.Max(1, PatchResolution) * LodDistance;
+            wakeSystem?.Bind(state.Properties, Mathf.Max(MinimumPatchSize * LodDistance, 1.4f * wakeReach), 4f * wakeReach);
             for (int i = 0; i < 16; i++)
                 LastDrawCount += state.Batches[i].Draw(meshes[i], runtimeMaterial, state.Properties, camera, gameObject.layer, ReceiveShadows);
             if(InfiniteHorizon)
@@ -384,13 +399,15 @@ namespace WaterSystem.Ocean
                 var frame = new OceanSimulationFrame(now, delta, simulatedFrame);
                 activeSimulation.RecordSimulation(simulationCommands, in frame);
 
-                // One world-space foam update per frame, after FFT production and before any camera draw.
-                wakeSystem?.RecordUpdate(simulationCommands, delta);
+                // Wakes and queries receive a narrow immutable resource view, never the FFT component.
+                bool hasSurface = activeSimulation.TryGetSurfaceQueryResources(out var queryResources);
 
-                // Query work is appended after simulation work to the same command buffer. The
-                // query system receives a narrow immutable resource view, never the FFT component.
-                if (surfaceQuerySystem != null && surfaceQuerySystem.isActiveAndEnabled &&
-                    activeSimulation.TryGetSurfaceQueryResources(out var queryResources))
+                // One world-space wake update per frame, after FFT production and before any camera draw.
+                if (hasSurface) wakeSystem?.RecordUpdate(simulationCommands, delta, in queryResources, this);
+
+                // Query work is appended after simulation and wake work to the same command buffer,
+                // so floating bodies ride this frame's ship waves as well.
+                if (hasSurface && surfaceQuerySystem != null && surfaceQuerySystem.isActiveAndEnabled)
                     surfaceQuerySystem.RecordQueries(simulationCommands, in queryResources, in frame);
 
                 // Submit once, before any ocean draw in this frame. The provider records its compute dispatches here.

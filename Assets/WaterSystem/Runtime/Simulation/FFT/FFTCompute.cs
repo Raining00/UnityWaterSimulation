@@ -141,6 +141,8 @@ namespace WaterSystem.Ocean
             commands.SetComputeTextureParam(activeShader, buildFoam.Index, OceanFFTShaderIDs.FoamResult, Textures.FoamCurrent);
             Dispatch(commands, buildFoam);
             Textures.SwapFoam();
+            // The surface shader reads the history that was just written; rebuild its mip chain.
+            commands.GenerateMips(Textures.FoamPrevious);
             // OceanRenderer immediately executes the buffer before BindResources. This flag is not a GPU fence.
             HasOutput = true;
             Status = "FFT commands recorded";
@@ -162,9 +164,14 @@ namespace WaterSystem.Ocean
             commands.SetComputeVectorParam(activeShader, OceanFFTShaderIDs.Dispersion, new Vector4(p.Gravity, p.LoopAngularFrequency, oceanSettings.shortWaveDamping, 0));
             commands.SetComputeVectorParam(activeShader, OceanFFTShaderIDs.Output, new Vector4(oceanSettings.choppiness, oceanSettings.normalStrength, 0, 0));
             commands.SetComputeVectorParam(activeShader, OceanFFTShaderIDs.FoamParameters, new Vector4(oceanSettings.foamThreshold, oceanSettings.foamSoftness, oceanSettings.foamDecay, oceanSettings.foamBuildRate));
+            commands.SetComputeVectorParam(activeShader, OceanFFTShaderIDs.FoamCrest, CrestParameters());
             commands.SetComputeVectorArrayParam(activeShader, OceanFFTShaderIDs.CascadeGeometry, p.CascadeGeometry);
             commands.SetComputeVectorArrayParam(activeShader, OceanFFTShaderIDs.CascadeSpectrum, p.CascadeSpectrum);
         }
+
+        // x: threshold, y: inverse softness (surface shader); z: recovery per second (BuildFoam).
+        Vector4 CrestParameters() => new Vector4(oceanSettings.crestFoamThreshold,
+            1f / Mathf.Max(0.01f, oceanSettings.crestFoamSoftness), oceanSettings.crestFoamRecovery, 0);
 
         void BindComponents(CommandBuffer commands, Kernel kernel)
         {
@@ -210,6 +217,7 @@ namespace WaterSystem.Ocean
             properties.SetInt(OceanFFTShaderIDs.Resolution, Parameters.Resolution);
             properties.SetVector(OceanFFTShaderIDs.DomainSizes, Parameters.DomainSizes);
             properties.SetFloat(OceanFFTShaderIDs.Time, (float)(oceanSettings != null && oceanSettings.loopPeriod > 0 ? SimulationTime % oceanSettings.loopPeriod : SimulationTime));
+            if (oceanSettings != null) properties.SetVector(OceanFFTShaderIDs.FoamCrest, CrestParameters());
             if (!HasOutput) return;
             properties.SetTexture(OceanFFTShaderIDs.Displacement, Textures.FFTDisplacement);
             properties.SetTexture(OceanFFTShaderIDs.Normal, Textures.FFTNormal);

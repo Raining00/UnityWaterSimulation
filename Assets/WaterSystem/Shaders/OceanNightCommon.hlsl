@@ -28,10 +28,26 @@ float OceanNightAmount(float3 mainSunDirection)
     return t * t * (3 - 2 * t);
 }
 
+float OceanNightSmoothFoam(float2 uv, int cascade);
+
 float OceanNightSampleFoam(float2 uv, int cascade, float night)
 {
     float original = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,uv,cascade,0).r;
     if (night <= 0) return original;
+    return lerp(original,OceanNightSmoothFoam(uv,cascade),night);
+}
+
+// x: accumulated whitecap coverage, y: remembered minimum Jacobian of this cascade (see BuildFoam).
+// Filtered with the caller's footprint, so distant foam averages into coverage instead of aliasing.
+float2 OceanSampleFoam(float2 uv, int cascade, float night, float2 uvDx, float2 uvDy)
+{
+    float2 original = SAMPLE_TEXTURE2D_ARRAY_GRAD(_OceanFoam,sampler_OceanFoam,uv,cascade,uvDx,uvDy).rg;
+    if (night <= 0) return original;
+    return float2(lerp(original.x,OceanNightSmoothFoam(uv,cascade),night),original.y);
+}
+
+float OceanNightSmoothFoam(float2 uv, int cascade)
+{
     // Large FFT domains can have metre-wide texels. HDR emission exposes the square support of
     // ordinary bilinear reconstruction; a positive cubic B-spline uses four bilinear taps and
     // has no overshoot or negative coverage. The simulation and daytime sampling stay unchanged.
@@ -48,8 +64,7 @@ float OceanNightSampleFoam(float2 uv, int cascade, float night)
     float s10 = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,float2(b.x,a.y),cascade,0).r;
     float s01 = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,float2(a.x,b.y),cascade,0).r;
     float s11 = SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanFoam,sampler_OceanFoam,b,cascade,0).r;
-    float smoothFoam = lerp(lerp(s00,s10,g1.x),lerp(s01,s11,g1.x),g1.y);
-    return lerp(original,smoothFoam,night);
+    return lerp(lerp(s00,s10,g1.x),lerp(s01,s11,g1.x),g1.y);
 }
 
 float3 OceanNightPalette(float deepBlend)

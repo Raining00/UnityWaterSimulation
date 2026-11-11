@@ -201,6 +201,7 @@ namespace WaterSystem.Ocean
             commands.SetComputeFloatParam(queryShader, QueryShaderIDs.OceanSeaLevel, resources.SeaLevel);
             commands.SetComputeTextureParam(queryShader, queryKernelIndex, QueryShaderIDs.OceanDisplacement, resources.Displacement);
             commands.SetComputeTextureParam(queryShader, queryKernelIndex, QueryShaderIDs.OceanNormals, resources.Normal);
+            OceanWakeSystem.BindCompute(owner.Wake, commands, queryShader, queryKernelIndex);
             commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryPoints, slot.Points);
             commands.SetComputeBufferParam(queryShader, queryKernelIndex, QueryShaderIDs.QueryResults, slot.Results);
             commands.DispatchCompute(queryShader, queryKernelIndex,

@@ -20,3 +20,4 @@ MonoBehaviour:
   CloudComposite: {fileID: 4800000, guid: 05fdc45840b7a46069925c99497b1463, type: 3}
   MilkyWay: {fileID: 2800000, guid: 39d1871cc6cf413399960a2cfb875fb7, type: 3}
   MoonSurface: {fileID: 2800000, guid: 6e7195dc0dd24934a3d2e7b18c80cf69, type: 3}
+  AuroraNoise: {fileID: 2800000, guid: a0be9ec4bfb84e26a80a3345ed886308, type: 3}

@@ -1,0 +1,23 @@
+AuroraNoise.png
+
+Original procedural noise data created for the WaterSystem project on 2026-11-01.
+No third-party image, photograph, aurora atlas, or image-generation model was used.
+This texture introduces no external asset attribution or license dependency.
+
+Format: 512 x 512, RGB8 PNG, linear data (not sRGB).
+Sampling: Repeat U/V, trilinear mipmaps, anisotropic level 4, no texture compression.
+
+R: Smooth broad periodic fBm, lattice frequencies 4, 8, 16, 32, 64.
+G: Independent finer periodic fBm, lattice frequencies 8, 16, 32, 64, 128.
+B: Fine periodic modulation, lattice frequencies 16, 32, 64, 128.
+
+Each channel is centred at approximately 0.5 with moderate contrast. It is scalar
+data for a procedural shader, not a pre-rendered aurora image or opacity mask.
+
+Generation uses deterministic integer hashing, wrapped lattice coordinates,
+quintic interpolation, and weighted octave summation. Integer octave frequencies
+make the continuous function periodic in both axes; the first and last texels
+are distinct pixel-centre samples, so they should not be duplicated manually.
+
+Seed: 20261101 (independent channel offsets 0, 1013, 2017).
+SHA-256: 1b8e506f10932e1544174783a32497ec25824c30a5f758b70ce27ee958dd03f4

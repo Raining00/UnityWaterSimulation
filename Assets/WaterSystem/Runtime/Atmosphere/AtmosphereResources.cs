@@ -13,6 +13,7 @@ namespace WaterSystem.Ocean
         public Shader CloudComposite;
         public Texture2D MilkyWay;
         public Texture2D MoonSurface;
+        public Texture2D AuroraNoise;
         static AtmosphereResources cached;
         public static AtmosphereResources Load()
         {

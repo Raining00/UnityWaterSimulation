@@ -24,6 +24,8 @@ Shader "WaterSystem/Atmosphere/Skybox"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "NightSkyCommon.hlsl"
             #include "MoonCommon.hlsl"
+            #include "AuroraCommon.hlsl"
+            #include "MeteorCommon.hlsl"
             CBUFFER_START(UnityPerMaterial)
                 float _Exposure, _SunDiscIntensity;
                 float4 _FallbackHorizon, _FallbackZenith;
@@ -52,6 +54,9 @@ Shader "WaterSystem/Atmosphere/Skybox"
                     MoonSkyResult moon = EvaluateMoon(direction, footprint);
                     // Air scattering lies in front of the solid moon; stars and the sun lie behind it.
                     color = AtmosphereSkyRadiance(direction) + background * (1 - moon.coverage) + moon.radiance;
+                    // High-altitude emission is in front of the celestial sphere and behind the clouds.
+                    color += AuroraRadiance(direction, footprint);
+                    color += MeteorRadiance(direction, footprint);
                     if (_AtmosphereWorld.w > 0.5)
                     {
                         // Cameras without the full-screen cloud pass (reflection probes) composite the panorama here.

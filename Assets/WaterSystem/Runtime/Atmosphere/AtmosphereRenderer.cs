@@ -26,6 +26,9 @@ namespace WaterSystem.Ocean
         public CloudSettings Clouds = new CloudSettings();
         public NightSkySettings NightSky = new NightSkySettings();
         public MoonSettings Moon = new MoonSettings();
+        public AuroraSettings Aurora = new AuroraSettings();
+        public MeteorSettings Meteors = new MeteorSettings();
+        readonly MeteorSkyState meteorState = new MeteorSkyState();
         bool moonHistoryReset;
         public AtmosphereLightingSettings Lighting = new AtmosphereLightingSettings();
         [Tooltip("Optional Game camera filter. Scene view cameras use their own buffers.")]
@@ -45,6 +48,7 @@ namespace WaterSystem.Ocean
         public Texture TransmittanceTexture => transmittanceLUT;
         public Light ActiveSun => activeSun;
         public float SeaLevelY => Ocean != null ? Ocean.transform.position.y : SeaLevel;
+        public int ActiveMeteorTrackCount => meteorState.Count;
 
         const int SkyViewWidth = 192, SkyViewHeight = 108, AerialSize = 32, WeatherSize = 512;
         const int PanoramaWidth = 512, PanoramaHeight = 256, ShapeNoiseSize = 128, DetailNoiseSize = 32;
@@ -103,6 +107,7 @@ namespace WaterSystem.Ocean
 
         void OnEnable()
         {
+            meteorState.Reset();
             RenderPipelineManager.beginCameraRendering += BeginCameraRendering;
             RenderPipelineManager.endCameraRendering += EndCameraRendering;
             moonHistoryReset = true;
@@ -126,6 +131,11 @@ namespace WaterSystem.Ocean
             Shader.SetGlobalVector(AtmosphereShaderIDs.MoonParams, Vector4.zero);
             Shader.SetGlobalVector(AtmosphereShaderIDs.MoonLight, Vector4.zero);
             Shader.SetGlobalFloat(AtmosphereShaderIDs.MoonCameraVisible, 0);
+            Shader.SetGlobalVector(AtmosphereShaderIDs.AuroraParams, Vector4.zero);
+            Shader.SetGlobalFloat(AtmosphereShaderIDs.AuroraCameraVisible, 0);
+            Shader.SetGlobalVector("_MeteorParams", Vector4.zero);
+            Shader.SetGlobalFloat("_MeteorCameraVisible", 0);
+            meteorState.Reset();
             Shader.SetGlobalVector(AtmosphereShaderIDs.SkyReflectionParams, Vector4.zero);
             Status = "Inactive";
         }
@@ -141,6 +151,9 @@ namespace WaterSystem.Ocean
             Clouds?.Validate();
             NightSky?.Validate();
             Moon?.Validate();
+            Aurora?.Validate();
+            Meteors?.Validate();
+            forceNewFrame = true;
             moonHistoryReset = true;
         }
         [ContextMenu("Regenerate Cloud Noise")]
@@ -156,11 +169,21 @@ namespace WaterSystem.Ocean
         /// <summary>Treat the next camera as a new frame even if Time.frameCount has not advanced (offline rendering).</summary>
         public void InvalidateFrame() => forceNewFrame = true;
 
+        /// <summary>Launch one cinematic meteor along the configured world-space sky path.</summary>
+        [ContextMenu("Trigger Meteor")]
+        public void TriggerMeteor()
+        {
+            meteorState.Trigger(Time.timeAsDouble);
+            forceNewFrame = true;
+        }
+
         void BeginCameraRendering(ScriptableRenderContext context, Camera camera)
         {
             if (camera != null && camera.cameraType == CameraType.Reflection)
             {
                 Shader.SetGlobalFloat(AtmosphereShaderIDs.MoonCameraVisible, 0);
+                Shader.SetGlobalFloat(AtmosphereShaderIDs.AuroraCameraVisible, 0);
+                Shader.SetGlobalFloat("_MeteorCameraVisible", 0);
                 return;
             }
             if (!isActiveAndEnabled || camera == null || failed) return;
@@ -213,7 +236,11 @@ namespace WaterSystem.Ocean
         {
             // Reflection probes deliberately omit the new moon until object-lighting support is added.
             if (camera != null && camera.cameraType == CameraType.Reflection)
+            {
                 Shader.SetGlobalFloat(AtmosphereShaderIDs.MoonCameraVisible, 1);
+                Shader.SetGlobalFloat(AtmosphereShaderIDs.AuroraCameraVisible, 1);
+                Shader.SetGlobalFloat("_MeteorCameraVisible", 1);
+            }
         }
 
         // ------------------------------------------------------------------ resources
@@ -223,11 +250,15 @@ namespace WaterSystem.Ocean
             Clouds ??= new CloudSettings();
             NightSky ??= new NightSkySettings();
             Moon ??= new MoonSettings();
+            Aurora ??= new AuroraSettings();
+            Meteors ??= new MeteorSettings();
             Lighting ??= new AtmosphereLightingSettings();
             Atmosphere.Validate();
             Clouds.Validate();
             NightSky.Validate();
             Moon.Validate();
+            Aurora.Validate();
+            Meteors.Validate();
             var resources = AtmosphereResources.Load();
             if (lutShader != resources.AtmosphereLUT || noiseShader != resources.CloudNoise || cloudShader != resources.VolumetricClouds || skyboxShader != resources.Skybox)
             {
@@ -416,6 +447,8 @@ namespace WaterSystem.Ocean
             commands.SetGlobalVector(AtmosphereShaderIDs.Night, new Vector4(night.r, night.g, night.b, 0));
             RecordNightSky(now);
             RecordMoon();
+            RecordAurora(now);
+            meteorState.Record(commands, Meteors, now, SunDirection, Atmosphere.Exposure);
             commands.SetGlobalVector(AtmosphereShaderIDs.LUT, new Vector4(SkyViewWidth, SkyViewHeight, AerialSize, Atmosphere.MaxAerialDistance));
             commands.SetGlobalVector(AtmosphereShaderIDs.World, new Vector4(SeaLevelY, 1, cloudsActive ? 1 : 0, 0));
             commands.SetGlobalVector(AtmosphereShaderIDs.CloudLayer, new Vector4(Clouds.BottomAltitude, Clouds.Thickness, 1f / Clouds.Thickness, 1f / (Clouds.WeatherScale * 1000f)));
@@ -492,6 +525,33 @@ namespace WaterSystem.Ocean
             commands.SetGlobalVector(AtmosphereShaderIDs.MoonLight,
                 new Vector4(light.r, light.g, light.b, Moon.Enabled && Moon.CloudLightIntensity > 0 && illumination > 0.0001f ? 1 : 0));
             commands.SetGlobalTexture(AtmosphereShaderIDs.MoonSurfaceTexture, texture);
+        }
+
+        void RecordAurora(double now)
+        {
+            var texture = Aurora.NoiseTexture != null ? Aurora.NoiseTexture : AtmosphereResources.Load().AuroraNoise;
+            if (texture == null) texture = Texture2D.grayTexture;
+            float azimuth = Aurora.Azimuth * Mathf.Deg2Rad;
+            // Every use of this phase in the shader is periodic, so wrapping does not cause a jump.
+            float phase = (float)((now * Aurora.Speed / 60.0 + Aurora.AnimationOffset) % 1.0);
+            Color lower = ToLinear(Aurora.LowerColor) * Atmosphere.Exposure;
+            Color upper = ToLinear(Aurora.UpperColor) * Atmosphere.Exposure;
+            commands.SetGlobalFloat(AtmosphereShaderIDs.AuroraCameraVisible, 1);
+            commands.SetGlobalTexture(AtmosphereShaderIDs.AuroraNoise, texture);
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraParams,
+                new Vector4(Aurora.Enabled ? 1 : 0, Aurora.Intensity, Aurora.Visibility(SunDirection), Aurora.Samples));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraLayer,
+                new Vector4(Aurora.BottomAltitude, Aurora.Height, Aurora.Distance, Aurora.Width));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraShape,
+                new Vector4(Aurora.FoldScale, Aurora.FoldStrength, Aurora.HorizontalExtent, Aurora.CurtainCount));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraDetail,
+                new Vector4(Aurora.RayStrength, Aurora.CurtainSpacing, texture.width, Mathf.Max(0, texture.mipmapCount - 1)));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraFrame,
+                new Vector4(Mathf.Sin(azimuth), Mathf.Cos(azimuth), transform.position.x * 0.001f, transform.position.z * 0.001f));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraAnimation,
+                new Vector4(phase, Mathf.Sin(Aurora.HorizonFade * Mathf.Deg2Rad), 0, 0));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraLowerColor, new Vector4(lower.r, lower.g, lower.b, 0));
+            commands.SetGlobalVector(AtmosphereShaderIDs.AuroraUpperColor, new Vector4(upper.r, upper.g, upper.b, 0));
         }
 
         void RecordNightSky(double now)

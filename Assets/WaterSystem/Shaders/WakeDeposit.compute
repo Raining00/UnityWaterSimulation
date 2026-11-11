@@ -1,46 +1,210 @@
-#pragma kernel UpdateWake
+// Ship wakes in a world-space window that follows the ships and is shared by every camera.
+//
+// BuildWakeWaves  bends the precomputed Kelvin wave pattern along each ship's trail. Nothing is
+//                 simulated: the pattern of a hull at constant speed is stationary in its own frame.
+// UpdateWakeFoam  carries the foam and aeration history forward and adds this frame's deposits.
+//
+// A window texel is an UNDISPLACED ocean coordinate, the same one the surface shader looks up. Both
+// kernels therefore push the texel through the FFT's horizontal displacement before comparing it
+// with a hull or a trail. That keeps the wake attached to the ship in choppy water, and lets foam
+// that has been deposited ride the waves afterwards instead of sliding under them.
+#pragma kernel BuildWakeWaves
+#pragma kernel UpdateWakeFoam
+
+struct WakeNode
+{
+    float2 position;   // World XZ of a trail sample; the first node of a ship is its wave origin now.
+    float2 backward;   // Unit direction along the trail towards older samples.
+    float distance;    // Metres behind the wave origin, measured along the trail.
+    float amplitude;   // Wave height in metres for a pattern value of one.
+    float breaking;    // Foam left by the crests of this part of the wake.
+    float padding;
+};
+
+struct WakeShip
+{
+    float2 boundsCenter;
+    float boundsRadius;
+    float hullLength;
+    float slice;       // Fractional Froude slice of the Kelvin atlas.
+    float scaleLow;    // (slice Froude / ship Froude)^2 for the lower and the upper slice: both are
+    float scaleHigh;   // read at the same k0-scaled position, so their crests line up while blending.
+    float nodeStart;
+    float nodeCount;
+    float3 padding;
+};
 
 struct WakeSplat
 {
     float2 center;
     float radius;
-    float strength;
+    float foam;        // Coverage reached at the centre.
+    float aeration;    // Bubbles below the surface reached at the centre.
+    float turbulence;  // 0 leaves a smooth disc, 1 breaks the deposit up completely.
+    float2 padding;
 };
 
-Texture2D<float> _PreviousWake;
-SamplerState sampler_LinearClamp;
-RWTexture2D<float> _WakeResult;
+StructuredBuffer<WakeNode> _WakeNodes;
+StructuredBuffer<WakeShip> _WakeShips;
 StructuredBuffer<WakeSplat> _WakeSplats;
-int _WakeSplatCount;
+int _WakeShipCount, _WakeSplatCount;
+
+Texture2D<float4> _KelvinAtlas;
+SamplerState sampler_LinearClamp;
+float4 _KelvinLayout;   // x: length behind the hull, y: half width (both in hull lengths), z: slices, w: rows per slice
+
+Texture2DArray<float4> _OceanDisplacement;
+SamplerState sampler_OceanDisplacement;
+int _FFTCascadeCount, _FFTResolution;
+float4 _OceanDomainSizes;
+
+RWTexture2D<float4> _WakeWaveResult;   // x: height, yz: gradient d/dx d/dz, w: breaking crests
+Texture2D<float4> _WakeWaves;
+Texture2D<float4> _PreviousWake;       // x: foam coverage, y: aeration
+RWTexture2D<float4> _WakeResult;
+
+float4 _WakeWindow;      // xy: world XZ of the minimum corner, z: metres per texel, w: resolution
+int _WakeShiftX, _WakeShiftY;   // Whole texels the window moved since the previous frame.
+float4 _WakeFoamParams;  // x: foam decay, y: aeration decay (per second), z/w: neighbour blend of foam/aeration
 float _WakeDeltaTime;
-float _WakeDecay;
-float _WakeSize;
-float2 _PreviousWakeOrigin;
-float2 _WakeOrigin;
+
+float2 DisplacedXZ(float2 baseXZ)
+{
+    float2 offset = 0;
+    int count = min(max(_FFTCascadeCount, 0), 4);
+    [loop] for (int cascade = 0; cascade < count; cascade++)
+        offset += _OceanDisplacement.SampleLevel(sampler_OceanDisplacement,
+            float3(baseXZ / _OceanDomainSizes[cascade] + 0.5 / _FFTResolution, cascade), 0).xz;
+    return baseXZ + offset;
+}
+
+// position: (distance behind the wave origin, distance from the trail) in hull lengths, already scaled
+// for this slice. Returns the normalised height and its derivatives along both axes.
+float3 SampleKelvinSlice(float slice, float2 position)
+{
+    float2 normalized = position / _KelvinLayout.xy;
+    // The first row of a slice lies exactly on the centre line, where the lateral slope is zero.
+    float row = clamp(normalized.y * (_KelvinLayout.w - 1.0) + 0.5, 0.5, _KelvinLayout.w - 0.5);
+    float2 uv = float2(normalized.x, (slice * _KelvinLayout.w + row) / (_KelvinLayout.z * _KelvinLayout.w));
+    float fade = (1.0 - smoothstep(0.82, 1.0, normalized.x)) * (1.0 - smoothstep(0.85, 1.0, normalized.y));
+    return _KelvinAtlas.SampleLevel(sampler_LinearClamp, uv, 0).rgb * fade;
+}
+
+float3 SampleKelvin(WakeShip ship, float2 position)
+{
+    float lower = floor(ship.slice);
+    float upper = min(lower + 1.0, _KelvinLayout.z - 1.0);
+    float3 a = SampleKelvinSlice(lower, position * ship.scaleLow) * float3(1, ship.scaleLow, ship.scaleLow);
+    float3 b = SampleKelvinSlice(upper, position * ship.scaleHigh) * float3(1, ship.scaleHigh, ship.scaleHigh);
+    return lerp(a, b, ship.slice - lower);
+}
 
 [numthreads(8, 8, 1)]
-void UpdateWake(uint3 id : SV_DispatchThreadID)
+void BuildWakeWaves(uint3 id : SV_DispatchThreadID)
 {
-    uint width, height;
-    _WakeResult.GetDimensions(width, height);
-    if (id.x >= width || id.y >= height) return;
+    if (any(id.xy >= (uint)_WakeWindow.w)) return;
+    float2 world = DisplacedXZ(_WakeWindow.xy + (float2(id.xy) + 0.5) * _WakeWindow.z);
+    float height = 0, crest = 0;
+    float2 gradient = 0;
+    [loop] for (int s = 0; s < _WakeShipCount; s++)
+    {
+        WakeShip ship = _WakeShips[s];
+        float2 toCenter = world - ship.boundsCenter;
+        if (dot(toCenter, toCenter) > ship.boundsRadius * ship.boundsRadius) continue;
+        int start = (int)ship.nodeStart, count = (int)ship.nodeCount;
+        WakeNode newer = _WakeNodes[start];
+        float ahead = dot(world - newer.position, newer.backward);
+        // Each pair of neighbouring samples owns the wedge between the two lines drawn across the
+        // trail at those samples. Wedges tile the outside of a turn without gaps; where they overlap
+        // on the inside, the contributions add like the waves they stand for.
+        [loop] for (int n = 1; n < count; n++)
+        {
+            WakeNode older = _WakeNodes[start + n];
+            float behind = dot(world - older.position, older.backward);
+            if (ahead >= 0 && behind < 0)
+            {
+                float t = ahead / (ahead - behind);
+                float amplitude = lerp(newer.amplitude, older.amplitude, t);
+                if (amplitude > 1e-5)
+                {
+                    float2 back = lerp(newer.backward, older.backward, t);
+                    back /= max(length(back), 1e-4);
+                    float2 side = float2(-back.y, back.x);
+                    float lateral = dot(world - lerp(newer.position, older.position, t), side);
+                    float2 position = float2(lerp(newer.distance, older.distance, t), abs(lateral)) / ship.hullLength;
+                    float3 pattern = SampleKelvin(ship, position);
+                    height += pattern.x * amplitude;
+                    gradient += (pattern.y * back + pattern.z * (lateral < 0 ? -side : side)) * (amplitude / ship.hullLength);
+                    crest += lerp(newer.breaking, older.breaking, t) * saturate(pattern.x * 2.5 - 1.0);
+                }
+            }
+            newer = older;
+            ahead = behind;
+        }
+    }
+    _WakeWaveResult[id.xy] = float4(height, gradient, crest);
+}
 
-    float2 uv = (float2(id.xy) + 0.5) / float2(width, height);
-    float2 worldXZ = _WakeOrigin + uv * _WakeSize;
-    float2 oldUV = (worldXZ - _PreviousWakeOrigin) / _WakeSize;
-    float foam = 0;
-    if (all(oldUV >= 0) && all(oldUV <= 1))
-        foam = _PreviousWake.SampleLevel(sampler_LinearClamp, oldUV, 0);
-    foam *= exp(-max(0, _WakeDecay) * max(0, _WakeDeltaTime));
+float Hash(float2 p)
+{
+    float3 q = frac(float3(p.xyx) * 0.1031);
+    q += dot(q, q.yzx + 33.33);
+    return frac((q.x + q.y) * q.z);
+}
 
-    [loop]
-    for (int i = 0; i < _WakeSplatCount; i++)
+float ValueNoise(float2 p)
+{
+    float2 cell = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(Hash(cell), Hash(cell + float2(1, 0)), f.x),
+                lerp(Hash(cell + float2(0, 1)), Hash(cell + float2(1, 1)), f.x), f.y);
+}
+
+[numthreads(8, 8, 1)]
+void UpdateWakeFoam(uint3 id : SV_DispatchThreadID)
+{
+    int resolution = (int)_WakeWindow.w;
+    if (any(id.xy >= (uint)resolution)) return;
+
+    // The window only ever moves by whole texels, so the history is copied, never resampled: a
+    // bilinear reprojection every frame would blur the foam away within a second.
+    int2 previous = (int2)id.xy + int2(_WakeShiftX, _WakeShiftY);
+    float2 state = 0;
+    if (all(previous >= 0) && all(previous < resolution))
+    {
+        int2 last = resolution - 1;
+        float2 centre = _PreviousWake.Load(int3(previous, 0)).xy;
+        float2 around = (_PreviousWake.Load(int3(clamp(previous + int2(1, 0), 0, last), 0)).xy +
+                         _PreviousWake.Load(int3(clamp(previous - int2(1, 0), 0, last), 0)).xy +
+                         _PreviousWake.Load(int3(clamp(previous + int2(0, 1), 0, last), 0)).xy +
+                         _PreviousWake.Load(int3(clamp(previous - int2(0, 1), 0, last), 0)).xy) * 0.25;
+        state = lerp(centre, around, _WakeFoamParams.zw);
+    }
+
+    float2 baseXZ = _WakeWindow.xy + (float2(id.xy) + 0.5) * _WakeWindow.z;
+    float dt = max(0, _WakeDeltaTime);
+    // Foam does not thin evenly. A slow world-anchored variation of the decay opens holes in the
+    // trail, and a finer one breaks up what the hull deposits, so the trail starts out churned.
+    float patches = ValueNoise(baseXZ * 0.37 + 11.5);
+    float churn = ValueNoise(baseXZ * 1.1) * 0.65 + ValueNoise(baseXZ * 3.1 + 7.7) * 0.35;
+    state.x *= exp(-_WakeFoamParams.x * (0.6 + 0.8 * patches) * dt);
+    state.y *= exp(-_WakeFoamParams.y * dt);
+
+    float2 world = DisplacedXZ(baseXZ);
+    [loop] for (int i = 0; i < _WakeSplatCount; i++)
     {
         WakeSplat splat = _WakeSplats[i];
-        float radius = max(0.05, splat.radius);
-        float distance01 = length(worldXZ - splat.center) / radius;
-        float shape = saturate(1 - distance01);
-        foam += max(0, splat.strength) * shape * shape * _WakeDeltaTime * 0.35;
+        float falloff = saturate(1.0 - length(world - splat.center) / max(splat.radius, 0.05));
+        if (falloff <= 0) continue;
+        float shape = falloff * falloff * (3.0 - 2.0 * falloff);
+        float broken = lerp(1.0, 0.4 + 1.2 * churn, splat.turbulence);
+        // Deposits raise the state to a level instead of adding a rate: the result does not depend
+        // on the frame rate or on how long a slow hull lingers over a texel.
+        state.x = max(state.x, splat.foam * saturate(shape * 1.5) * broken);
+        state.y = max(state.y, splat.aeration * saturate(shape * 2.0));
     }
-    _WakeResult[id.xy] = saturate(foam);
+    float crest = _WakeWaves.Load(int3(id.xy, 0)).w;
+    state.x = max(state.x, crest * (0.45 + 1.1 * churn));
+    state.y = max(state.y, saturate(crest * 0.8));
+    _WakeResult[id.xy] = float4(min(state, 4.0), 0, 0);
 }

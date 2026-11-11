@@ -47,7 +47,6 @@ Shader "WaterSystem/OceanStylized"
             TEXTURE2D_ARRAY(_OceanDisplacement); SAMPLER(sampler_OceanDisplacement);
             TEXTURE2D_ARRAY(_OceanNormals); SAMPLER(sampler_OceanNormals);
             TEXTURE2D_ARRAY(_OceanFoam); SAMPLER(sampler_OceanFoam);
-            TEXTURE2D(_OceanWakeFoam); SAMPLER(sampler_OceanWakeFoam);
             TEXTURE2D(_FoamTex); SAMPLER(sampler_FoamTex);
             TEXTURE2D(_CausticTex); SAMPLER(sampler_CausticTex);
             TEXTURE2D(_DetailNormal); SAMPLER(sampler_DetailNormal);
@@ -56,9 +55,12 @@ Shader "WaterSystem/OceanStylized"
             // Per-ocean values are supplied by MaterialPropertyBlock, not shared global shader state.
             int _OceanSimulationReady, _FFTCascadeCount, _FFTResolution;
             float4 _OceanDomainSizes, _OceanOrigin;
-            float4 _OceanWakeOriginSize;
+            // x: ripple damping in churned water (physical shading only), yz: camera distances between
+            // which ship waves stop displacing vertices.
+            float4 _OceanWakeSurface;
             float _OceanSimulationTime;
             float _OceanInfinite, _OceanHorizonExtent;
+            #include "OceanWakeCommon.hlsl"
             CBUFFER_START(UnityPerMaterial)
                 float4 _DeepColor, _ShallowColor, _TurquoiseColor, _HorizonColor, _SkyHorizon, _SkyZenith, _FoamColor;
                 float4 _WaterDepth, _NormalSpeed, _ShoreFoam;
@@ -115,6 +117,10 @@ Shader "WaterSystem/OceanStylized"
                         position += SAMPLE_TEXTURE2D_ARRAY_LOD(_OceanDisplacement,sampler_OceanDisplacement,
                             output.baseXZ / _OceanDomainSizes[i] + 0.5 / _FFTResolution,i,0).xyz*waveWeight;
                 }
+                // Ship waves lift the same vertices. They fade out where the mesh becomes too coarse
+                // to carry them; their per-pixel slopes continue beyond that distance.
+                position.y += OceanWakeHeight(output.baseXZ)*waveWeight*
+                    (1-smoothstep(_OceanWakeSurface.y,_OceanWakeSurface.z,distance(position,_WorldSpaceCameraPos)));
                 output.positionWS = position;
                 output.positionCS = TransformWorldToHClip(position);
                 output.fog = ComputeFogFactor(output.positionCS.z);
@@ -198,10 +204,12 @@ Shader "WaterSystem/OceanStylized"
                 float2 slope = 0;
                 float foam = 0;
                 float waveWeight=WaveWeight(baseXZ);
-                // Evaluate derivatives before the varying horizon branch; the FFT arrays have no mips.
-                float2 baseFootprint=max(abs(ddx(baseXZ)),abs(ddy(baseXZ)));
+                // Evaluate derivatives before any varying branch; every filtered lookup below reuses them.
+                float2 baseDx=ddx(baseXZ),baseDy=ddy(baseXZ);
+                float2 baseFootprint=max(abs(baseDx),abs(baseDy));
                 float distanceToCamera = distance(positionWS,_WorldSpaceCameraPos);
                 float night = OceanNightAmount(GetMainLight().direction);
+                OceanWake wake = SampleOceanWake(baseXZ,baseDx,baseDy);
                 if (_OceanSimulationReady != 0 && waveWeight>0)
                 {
                     [loop] for (int i=0; i<_FFTCascadeCount; i++)
@@ -216,6 +224,7 @@ Shader "WaterSystem/OceanStylized"
                         foam = 1-(1-foam)*(1-f);
                     }
                 }
+                slope += wake.gradient;
                 slope*=waveWeight;foam*=waveWeight;
                 float t = _OceanSimulationTime;
                 float detailFade = (1-smoothstep(_DetailFadeDistance*0.25,_DetailFadeDistance,distanceToCamera))*waveWeight;
@@ -309,14 +318,7 @@ Shader "WaterSystem/OceanStylized"
                 // decoration is combined separately below.
                 // Night fluorescence also follows the world-space trail left by moving vessels.
                 // Keep the legacy daytime foam unchanged when night is zero.
-                if (_OceanWakeOriginSize.z > 0.0 && night > 0.0)
-                {
-                    float2 wakeUV = (baseXZ - _OceanWakeOriginSize.xy) * _OceanWakeOriginSize.w;
-                    float edge = min(min(wakeUV.x,wakeUV.y),min(1.0-wakeUV.x,1.0-wakeUV.y));
-                    float wake = SAMPLE_TEXTURE2D_LOD(_OceanWakeFoam,sampler_OceanWakeFoam,wakeUV,0).r;
-                    wake *= smoothstep(0.0,0.035,edge) * waveWeight * night;
-                    foam = 1.0-(1.0-foam)*(1.0-wake);
-                }
+                foam = 1.0-(1.0-foam)*(1.0-saturate(wake.foam)*waveWeight*night);
                 float2 foamUV = baseXZ*_FoamScale;
                 float f1 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+t*float2(0.008,0.004),0).r;
                 float f2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-t*float2(0.003,0.006),0).r;

@@ -9,7 +9,7 @@
 #define PI 3.14159265358979323846
 int _FFTResolution, _FFTCascadeCount, _FFTStageCount, _FFTStage, _FFTAxis, _SpectrumSeed;
 float _FFTNormalization, _OceanSimulationTime, _OceanSimulationDeltaTime;
-float4 _OceanWind, _OceanSpectrum, _OceanDispersion, _OceanOutput, _OceanFoamParameters;
+float4 _OceanWind, _OceanSpectrum, _OceanDispersion, _OceanOutput, _OceanFoamParameters, _OceanFoamCrest;
 float4 _OceanCascadeGeometry[4], _OceanCascadeSpectrum[4];
 RWTexture2DArray<float4> _SpectrumInitial;
 RWTexture2DArray<float2> _SpectrumX, _SpectrumY, _SpectrumZ;
@@ -17,8 +17,9 @@ Texture2D<float4> _FFTButterfly;
 Texture2DArray<float2> _FFTInput;
 RWTexture2DArray<float2> _FFTResult;
 RWTexture2DArray<float4> _OceanDisplacement, _OceanNormals;
-Texture2DArray<float> _FoamPrevious;
-RWTexture2DArray<float> _FoamResult;
+// x: accumulated whitecap coverage, y: remembered minimum of this cascade's Jacobian.
+Texture2DArray<float4> _FoamPrevious;
+RWTexture2DArray<float4> _FoamResult;
 
 bool Outside(uint3 id) { return any(id.xy >= (uint)_FFTResolution) || id.z >= (uint)_FFTCascadeCount; }
 uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; return x ^ (x >> 16); }
@@ -125,16 +126,25 @@ void BuildNormals(uint3 id : SV_DispatchThreadID)
 [numthreads(8,8,1)]
 void ClearFoam(uint3 id : SV_DispatchThreadID)
 {
-    if (!Outside(id)) _FoamResult[id] = 0;
+    // An undisturbed surface has no foam and a Jacobian of one.
+    if (!Outside(id)) _FoamResult[id] = float4(0,1,0,0);
 }
 [numthreads(8,8,1)]
 void BuildFoam(uint3 id : SV_DispatchThreadID)
 {
     if (Outside(id)) return;
-    float source = saturate((_OceanFoamParameters.x - _OceanNormals[id].w) / max(0.01,_OceanFoamParameters.y));
+    float jacobian = _OceanNormals[id].w;
+    float2 previous = _FoamPrevious.Load(int4(id,0)).xy;
+    float source = saturate((_OceanFoamParameters.x - jacobian) / max(0.01,_OceanFoamParameters.y));
     // Capillary-scale ripples should not paint the whole ocean white; whitecaps come from larger waves.
     source *= saturate((_OceanCascadeGeometry[id.z].x - 5) / 45);
     float dt = max(0,_OceanSimulationDeltaTime);
-    float history = _FoamPrevious.Load(int4(id,0)) * exp(-dt * _OceanFoamParameters.z);
-    _FoamResult[id] = saturate(lerp(history, 1, 1-exp(-source * _OceanFoamParameters.w * dt)));
+    float history = previous.x * exp(-dt * _OceanFoamParameters.z);
+    float coverage = saturate(lerp(history, 1, 1-exp(-source * _OceanFoamParameters.w * dt)));
+    // A cascade cannot see the other cascades' compression, so it cannot decide alone where the
+    // combined surface folds. It keeps the lowest Jacobian it recently reached and lets that recover
+    // at a fixed rate; the surface shader adds the cascades and thresholds the total. The recovery
+    // is what leaves a short trail of foam behind a crest that has already moved on.
+    float remembered = min(clamp(jacobian,-1,2), previous.y + dt * _OceanFoamCrest.z);
+    _FoamResult[id] = float4(coverage, remembered, 0, 0);
 }

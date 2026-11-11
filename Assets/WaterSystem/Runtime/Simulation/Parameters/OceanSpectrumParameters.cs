@@ -25,8 +25,8 @@ namespace WaterSystem.Ocean
         // Per cascade: (minimum radial k, maximum radial k, vertical weight, turbulence).
         public readonly Vector4[] CascadeSpectrum = new Vector4[OceanSettings.MaxCascades];
         public int InitialSpectrumHash { get; private set; }
-        // H0 + 5 complex fields + displacement/normal + two R16 foam histories + butterfly LUT.
-        public long EstimatedTextureBytes => (long)Resolution * Resolution * CascadeCount * 76 + (long)Resolution * StageCount * 16;
+        // H0 + 5 complex fields + displacement/normal + two mipmapped RGBA16 foam histories + butterfly LUT.
+        public long EstimatedTextureBytes => (long)Resolution * Resolution * CascadeCount * 94 + (long)Resolution * StageCount * 16;
 
         public void UpdateFrom(OceanSettings settings)
         {

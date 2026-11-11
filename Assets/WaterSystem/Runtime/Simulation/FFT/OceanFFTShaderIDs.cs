@@ -32,6 +32,8 @@ namespace WaterSystem.Ocean
         public static readonly int DomainSizes = Shader.PropertyToID("_OceanDomainSizes");
         public static readonly int Ready = Shader.PropertyToID("_OceanSimulationReady");
         public static readonly int FoamParameters = Shader.PropertyToID("_OceanFoamParameters");
+        // x: crest threshold, y: inverse softness (surface shader); z: recovery per second (compute).
+        public static readonly int FoamCrest = Shader.PropertyToID("_OceanFoamCrest");
         public static readonly int FoamPrevious = Shader.PropertyToID("_FoamPrevious");
         public static readonly int FoamResult = Shader.PropertyToID("_FoamResult");
         public static readonly int Foam = Shader.PropertyToID("_OceanFoam");

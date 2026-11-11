@@ -62,6 +62,14 @@ namespace WaterSystem.Ocean
         [Min(0)] public float foamDecay = 0.5f;
         [Min(0)] public float foamBuildRate = 3;
 
+        [Header("Breaking crests (combined fold of all cascades, physical shading)")]
+        [Tooltip("Foam appears where the Jacobian of all cascades together drops below this value. Raise it for more whitecaps.")]
+        [Range(-1, 1.5f)] public float crestFoamThreshold = 0.5f;
+        [Tooltip("Jacobian range over which crest foam grows from sparse lace to solid white.")]
+        [Min(0.01f)] public float crestFoamSoftness = 0.9f;
+        [Tooltip("How fast a folded crest is forgotten, in Jacobian units per second. Lower values leave a longer dissolving trail behind each breaker.")]
+        [Min(0.01f)] public float crestFoamRecovery = 0.45f;
+
         public void Validate()
         {
             fftWaveQuality = (uint)Mathf.ClosestPowerOfTwo((int)Math.Min(MaxResolution, Math.Max(MinResolution, fftWaveQuality)));
@@ -89,6 +97,9 @@ namespace WaterSystem.Ocean
             foamSoftness = Mathf.Max(0.01f, Finite(foamSoftness, 0.4f));
             foamDecay = NonNegative(foamDecay, 0.5f);
             foamBuildRate = NonNegative(foamBuildRate, 3);
+            crestFoamThreshold = Mathf.Clamp(Finite(crestFoamThreshold, 0.5f), -1, 1.5f);
+            crestFoamSoftness = Mathf.Max(0.01f, Finite(crestFoamSoftness, 0.9f));
+            crestFoamRecovery = Mathf.Max(0.01f, Finite(crestFoamRecovery, 0.45f));
             Resize(ref wavesDomainSizes, DefaultDomains);
             Resize(ref wavesDomainHeightScales, DefaultHeights);
             Resize(ref cascadeTurbulenceFloor, DefaultTurbulence);

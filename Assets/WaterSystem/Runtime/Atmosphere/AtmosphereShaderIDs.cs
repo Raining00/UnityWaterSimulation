@@ -50,6 +50,17 @@ namespace WaterSystem.Ocean
         public static readonly int MoonSurfaceTexture = Shader.PropertyToID("_MoonSurfaceTexture");
         public static readonly int MoonLight = Shader.PropertyToID("_MoonLight");
         public static readonly int MoonCameraVisible = Shader.PropertyToID("_MoonCameraVisible");
+        // Camera-sky aurora. Deliberately excluded from ambient/reflection compute products.
+        public static readonly int AuroraParams = Shader.PropertyToID("_AuroraParams");
+        public static readonly int AuroraLayer = Shader.PropertyToID("_AuroraLayer");
+        public static readonly int AuroraShape = Shader.PropertyToID("_AuroraShape");
+        public static readonly int AuroraDetail = Shader.PropertyToID("_AuroraDetail");
+        public static readonly int AuroraFrame = Shader.PropertyToID("_AuroraFrame");
+        public static readonly int AuroraAnimation = Shader.PropertyToID("_AuroraAnimation");
+        public static readonly int AuroraLowerColor = Shader.PropertyToID("_AuroraLowerColor");
+        public static readonly int AuroraUpperColor = Shader.PropertyToID("_AuroraUpperColor");
+        public static readonly int AuroraNoise = Shader.PropertyToID("_AuroraNoise");
+        public static readonly int AuroraCameraVisible = Shader.PropertyToID("_AuroraCameraVisible");
         // Clouds
         public static readonly int CloudShapeNoise = Shader.PropertyToID("_CloudShapeNoise");
         public static readonly int CloudDetailNoise = Shader.PropertyToID("_CloudDetailNoise");

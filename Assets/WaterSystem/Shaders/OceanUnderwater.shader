@@ -36,6 +36,7 @@ Shader "Hidden/WaterSystem/Underwater"
             float4 _UnderwaterSun, _UnderwaterSunDirection;
             float4 _UnderwaterWarp, _UnderwaterFlow, _UnderwaterShafts, _UnderwaterShaftFlow;
             float _UnderwaterShaftSteps, _UnderwaterTime, _UnderwaterFlowSpeed;
+            #include "OceanWakeCommon.hlsl"
 
             float Weight(float2 xz)
             {
@@ -56,7 +57,8 @@ Shader "Hidden/WaterSystem/Underwater"
                 // Invert horizontal choppiness so the query agrees with the displaced surface mesh.
                 float2 baseXZ = worldXZ;
                 [unroll] for(int i=0;i<2;i++) baseXZ = worldXZ-Displacement(baseXZ).xz;
-                return _OceanOrigin.y+Displacement(baseXZ).y;
+                // Ship waves lift the rendered surface too; the waterline has to follow them.
+                return _OceanOrigin.y+Displacement(baseXZ).y+OceanWakeHeight(baseXZ)*Weight(baseXZ);
             }
 
             // ------------------------------------------------------------- flowing distortion

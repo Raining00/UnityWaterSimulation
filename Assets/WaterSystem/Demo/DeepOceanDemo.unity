@@ -20,9 +20,9 @@ RenderSettings:
   m_FogDensity: 0.00055
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.13628793, g: 0.116496794, b: 0.34210393, a: 1}
-  m_AmbientEquatorColor: {r: 0.07950882, g: 0.05298339, b: 0.2357983, a: 1}
-  m_AmbientGroundColor: {r: 0.005, g: 0.006, b: 0.0166078, a: 1}
+  m_AmbientSkyColor: {r: 0.6730227, g: 0.6987789, b: 0.777671, a: 1}
+  m_AmbientEquatorColor: {r: 0.4696278, g: 0.56416875, b: 0.7056367, a: 1}
+  m_AmbientGroundColor: {r: 0.03815924, g: 0.055744752, b: 0.08312077, a: 1}
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
@@ -391,7 +391,7 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_Color: {r: 0.95208865, g: 0.90566283, b: 0.8355445, a: 1}
   m_Intensity: 3.15
   m_Range: 10
   m_SpotAngle: 30
@@ -454,7 +454,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 265525049}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.19140814, y: 0.38183752, z: 0.081158675, w: 0.90054226}
+  m_LocalRotation: {x: -0.15322782, y: 0.846586, z: -0.35064858, w: -0.36994454}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -477,7 +477,7 @@ MonoBehaviour:
   m_AdditionalLightsShadowResolutionTier: 2
   m_CustomShadowLayers: 0
   m_LightCookieSize: {x: 24000, y: 24000}
-  m_LightCookieOffset: {x: -0.00010545648, y: -0.00050570234}
+  m_LightCookieOffset: {x: -0.00013130758, y: -0.0011268908}
   m_SoftShadowQuality: 0
   m_RenderingLayersMask:
     serializedVersion: 0
@@ -502,7 +502,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbe06230127914d05b9fb9e574a29277, type: 3}
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.AtmosphereSunAnimator
-  TimeOfDay: 4.4
+  TimeOfDay: 15
   Latitude: 0
   Declination: 0.5
   NorthYaw: 136.50203
@@ -2057,7 +2057,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e086794d751ae98498fd21d7a1633ebf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: WaterSystem.Ocean::WaterSystem.Ocean.OceanSettings
-  windSpeed: 2.66
+  windSpeed: 6.09
   windRotation: 25
   windTurbulence: 1
   windZone: {fileID: 0}
@@ -2089,10 +2089,10 @@ MonoBehaviour:
   timeOffset: 0
   loopPeriod: 0
   heightScale: 3.97
-  choppiness: -1.82
+  choppiness: -1.48
   normalStrength: 1
   maximumDisplacement: {x: 5, y: 15}
-  foamThreshold: 0.5
+  foamThreshold: 0.704
   foamSoftness: 1.38
   foamDecay: 1.99
   foamBuildRate: 1
@@ -2342,7 +2342,7 @@ MonoBehaviour:
     Enabled: 1
     BottomAltitude: 1500
     Thickness: 2600
-    Coverage: 0.448
+    Coverage: 0.578
     CloudType: 0.6
     TypeVariation: 0.7
     WeatherScale: 40
@@ -2411,6 +2411,61 @@ MonoBehaviour:
     HaloRadius: 4.6
     HaloFalloff: 2.7
     CloudLightIntensity: 1.65
+  Aurora:
+    Enabled: 1
+    Intensity: 1.5
+    LowerColor: {r: 0.08, g: 1, b: 0.38, a: 1}
+    UpperColor: {r: 0.55, g: 0.18, b: 0.95, a: 1}
+    Azimuth: 0
+    Distance: 250
+    HorizontalExtent: 900
+    BottomAltitude: 100
+    Height: 140
+    CurtainCount: 3
+    CurtainSpacing: 70
+    Width: 12
+    FoldScale: 250
+    FoldStrength: 80
+    RayStrength: 0.85
+    NoiseTexture: {fileID: 0}
+    Speed: 0.25
+    AnimationOffset: 0
+    AutomaticNight: 1
+    ManualVisibility: 1
+    FadeStartElevation: -4
+    FullNightElevation: -14
+    HorizonFade: 3
+    Samples: 32
+  Meteors:
+    Enabled: 1
+    Intensity: 8
+    HeadColor: {r: 0.72, g: 0.94, b: 1, a: 1}
+    TailColor: {r: 0.05, g: 0.5, b: 1, a: 1}
+    SplitColor: {r: 0.95, g: 0.12, b: 0.55, a: 1}
+    Azimuth: 0
+    Elevation: 45
+    PathAngle: -25
+    TravelAngle: 60
+    Duration: 6
+    TailDuration: 3
+    Afterglow: 3
+    HeadSize: 0.15
+    TrailWidth: 0.065
+    Bend: 4
+    SplitCount: 3
+    SplitAngle: 5
+    Fragments: 3
+    Automatic: 1
+    SpawnInterval: {x: 14, y: 24}
+    FirstDelay: 1.5
+    DirectionVariation: 12
+    Seed: 8173
+    AutomaticNight: 1
+    ManualVisibility: 1
+    FadeStartElevation: -4
+    FullNightElevation: -14
+    Preview: 0
+    PreviewTime: 4
   Lighting:
     DriveSunLight: 1
     DriveAmbient: 1

@@ -31,6 +31,9 @@ int _FFTResolution;
 float4 _OceanDomainSizes;
 float _OceanSeaLevel;
 
+// Ship waves, addressed with the same undisplaced coordinate as the FFT textures.
+#include "OceanWakeCommon.hlsl"
+
 float2 CascadeUV(float2 baseXZ, int cascade)
 {
     // FFT texels represent periodic world-space domains. The half-texel offset matches
@@ -54,9 +57,9 @@ float3 SampleCombinedDisplacement(float2 baseXZ)
     return displacement;
 }
 
-float3 SampleCombinedNormal(float2 baseXZ)
+float3 SampleCombinedNormal(float2 baseXZ, float2 wakeGradient)
 {
-    float2 slope = 0;
+    float2 slope = wakeGradient;
     int cascadeCount = min(max(_FFTCascadeCount, 0), MAX_OCEAN_CASCADES);
 
     [loop]
@@ -100,11 +103,12 @@ void QueryKernel(uint3 dispatchId : SV_DispatchThreadID)
     float3 queryPoint = _QueryPoints[index];
     float2 baseXZ = InvertHorizontalDisplacement(queryPoint.xz);
     float3 displacement = SampleCombinedDisplacement(baseXZ);
+    float3 wake = OceanWakeSurface(baseXZ);
 
     SurfaceQueryResult result;
-    result.position = float3(queryPoint.x, _OceanSeaLevel + displacement.y, queryPoint.z);
+    result.position = float3(queryPoint.x, _OceanSeaLevel + displacement.y + wake.x, queryPoint.z);
     result.signedDepth = result.position.y - queryPoint.y;
-    result.normal = SampleCombinedNormal(baseXZ);
+    result.normal = SampleCombinedNormal(baseXZ, wake.yz);
     result.reserved = 0;
     _QueryResults[index] = result;
 }

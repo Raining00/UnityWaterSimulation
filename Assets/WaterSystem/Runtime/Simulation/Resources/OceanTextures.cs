@@ -51,8 +51,11 @@ namespace WaterSystem.Ocean
                 Pong = Create("FFT Pong", GraphicsFormat.R32G32_SFloat);
                 FFTDisplacement = Create("Displacement XYZ / Reserved", GraphicsFormat.R16G16B16A16_SFloat, FilterMode.Bilinear);
                 FFTNormal = Create("Normal XYZ / Jacobian", GraphicsFormat.R16G16B16A16_SFloat, FilterMode.Bilinear);
-                FoamPrevious = Create("Foam history", GraphicsFormat.R16_SFloat, FilterMode.Bilinear);
-                FoamCurrent = Create("Foam current", GraphicsFormat.R16_SFloat, FilterMode.Bilinear);
+                // Coverage and the remembered Jacobian. The same four-channel half format as the
+                // displacement keeps the requirements unchanged; mips let distant foam average
+                // into coverage instead of aliasing.
+                FoamPrevious = Create("Foam history", GraphicsFormat.R16G16B16A16_SFloat, FilterMode.Trilinear, true);
+                FoamCurrent = Create("Foam current", GraphicsFormat.R16G16B16A16_SFloat, FilterMode.Trilinear, true);
                 var data = OceanButterfly.BuildLookup(Resolution, out int stages);
                 ButterflyLookup = new Texture2D(Resolution, stages, TextureFormat.RGBAFloat, false, true)
                 {
@@ -65,7 +68,7 @@ namespace WaterSystem.Ocean
             catch { Dispose(); throw; }
         }
 
-        RenderTexture Create(string label, GraphicsFormat format, FilterMode filter = FilterMode.Point)
+        RenderTexture Create(string label, GraphicsFormat format, FilterMode filter = FilterMode.Point, bool mips = false)
         {
             if (!SystemInfo.IsFormatSupported(format, GraphicsFormatUsage.LoadStore) ||
                 !SystemInfo.IsFormatSupported(format, GraphicsFormatUsage.Sample))
@@ -74,7 +77,8 @@ namespace WaterSystem.Ocean
             {
                 graphicsFormat = format, depthBufferBits = 0, dimension = TextureDimension.Tex2DArray,
                 volumeDepth = CascadeCount, msaaSamples = 1, enableRandomWrite = true,
-                useMipMap = false, autoGenerateMips = false, sRGB = false
+                // Compute writes mip 0 only; the owner regenerates the chain after each write.
+                useMipMap = mips, autoGenerateMips = false, sRGB = false
             };
             var texture = new RenderTexture(descriptor)
             {

@@ -27,6 +27,7 @@ Shader "Hidden/WaterSystem/StylizedUnderwater"
             float4 _StylizedFog, _StylizedDepthFog, _StylizedWaterline;
             float4 _StylizedDistortion, _StylizedCaustics, _StylizedShafts;
             float4 _StylizedCausticTex_TexelSize;
+            #include "OceanWakeCommon.hlsl"
 
             float DomainWeight(float2 xz)
             {
@@ -57,7 +58,8 @@ Shader "Hidden/WaterSystem/StylizedUnderwater"
                 float2 baseXZ = worldXZ;
                 [unroll] for (int i = 0; i < 2; i++)
                     baseXZ = worldXZ - Displacement(baseXZ).xz;
-                return _OceanOrigin.y + Displacement(baseXZ).y;
+                // Ship waves lift the rendered surface too; the waterline has to follow them.
+                return _OceanOrigin.y + Displacement(baseXZ).y + OceanWakeHeight(baseXZ) * DomainWeight(baseXZ);
             }
 
             float3 CausticPattern(float2 worldXZ, float timeOffset, float mip)
