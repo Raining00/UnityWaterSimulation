@@ -1,7 +1,7 @@
 #ifndef WATERSYSTEM_OCEAN_FOAM_INCLUDED
 #define WATERSYSTEM_OCEAN_FOAM_INCLUDED
 
-// Foam appearance of the physical ocean shader. Include after the material constants:
+// Shared foam appearance of the physical and stylized ocean shaders. Include after the material constants:
 //   _FoamPattern           R lace erosion field, G bubble field, B relief of dense foam, A macro clumps
 //                          (see Tools/WaterTextures/generate_foam_pattern.py)
 //   _FoamPatternParams     x: metres per pattern tile, y: fine lace amount, z: bubble amount, w: clumping

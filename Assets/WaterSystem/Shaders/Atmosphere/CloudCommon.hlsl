@@ -9,7 +9,7 @@
 TEXTURE3D(_CloudShapeNoise);  SAMPLER(sampler_CloudShapeNoise);
 TEXTURE3D(_CloudDetailNoise); SAMPLER(sampler_CloudDetailNoise);
 TEXTURE2D(_CloudWeatherMap);  SAMPLER(sampler_CloudWeatherMap);
-StructuredBuffer<float4> _AtmosphereAmbient; // 0 sky, 1 equator, 2 ground, 3 sun transmittance (previous frame)
+StructuredBuffer<float4> _AtmosphereAmbient; // 0 sky, 1 equator, 2 ground, 3 sun transmittance, 4 clear sky, 5 clear ground
 
 float4 _CloudLayer;        // x bottom altitude m, y thickness m, z 1/thickness, w 1/weather tiling (1/m)
 float4 _CloudShape;        // x 1/shape scale (1/m), y 1/detail scale (1/m), z detail strength, w cloud type bias
@@ -56,23 +56,24 @@ float CloudDensity(float3 positionWS, float heightFraction, bool detail, out flo
     if (coverage > 0.002 && gradient > 0.002)
     {
         float3 windOffset = float3(_CloudWind.x, 0, _CloudWind.y);
-        float3 shapePosition = (positionWS + windOffset * (1.0 + _CloudWind.z * heightFraction)) * _CloudShape.x;
+        float3 shearOffset = windOffset * (_CloudWind.z * heightFraction * min(1.0, _CloudLayer.y / max(length(windOffset), 1.0)));
+        float3 shapePosition = (positionWS + windOffset + shearOffset) * _CloudShape.x;
         float4 shape = SAMPLE_TEXTURE3D_LOD(_CloudShapeNoise, sampler_CloudShapeNoise, shapePosition, 0);
         float lowFrequencyFbm = shape.g * 0.625 + shape.b * 0.25 + shape.a * 0.125;
-        float base = saturate(CloudRemap(shape.r, lowFrequencyFbm - 1.0, 1.0, 0.0, 1.0)) * gradient;
+        float base = saturate(CloudRemap(shape.r, lowFrequencyFbm - 1.0, 1.0, 0.0, 1.0));
         // Taller cloud types thin out towards their tops.
         coverage *= lerp(1.0, saturate(1.15 - heightFraction), type * 0.6);
         density = saturate(CloudRemap(base, 1.0 - coverage, 1.0, 0.0, 1.0)) * coverage;
         if (detail && density > 0.0)
         {
-            float3 detailPosition = (positionWS + windOffset * (1.4 + _CloudWind.z * heightFraction)) * _CloudShape.y;
+            float3 detailPosition = (positionWS + windOffset * 1.4 + shearOffset) * _CloudShape.y;
             float3 d = SAMPLE_TEXTURE3D_LOD(_CloudDetailNoise, sampler_CloudDetailNoise, detailPosition, 0).rgb;
             float highFrequencyFbm = d.r * 0.625 + d.g * 0.25 + d.b * 0.125;
             float modifier = lerp(highFrequencyFbm, 1.0 - highFrequencyFbm, saturate(heightFraction * 10.0));
             density = saturate(CloudRemap(density, modifier * _CloudShape.z, 1.0, 0.0, 1.0));
         }
     }
-    return density;
+    return density * gradient;
 }
 
 float CloudDualPhase(float cosTheta, float phaseScale)
@@ -84,15 +85,15 @@ float CloudDualPhase(float cosTheta, float phaseScale)
 // Wrenninge's multiple-scattering octaves: attenuated extinction, contribution and phase anisotropy.
 float CloudMultiScatterSunlight(float opticalDepth, float cosTheta)
 {
-    float a = 1.0, b = 1.0, c = 1.0, sum = 0.0;
-    [unroll] for (int i = 0; i < 3; i++)
+    float attenuation = 1.0, contribution = 1.0, phaseScale = 1.0, scattered = 0.0;
+    [unroll] for (int octave = 0; octave < 5; octave++)
     {
-        sum += b * exp(-opticalDepth * a) * CloudDualPhase(cosTheta, c);
-        a *= _CloudMultiScatter.x;
-        b *= _CloudMultiScatter.y;
-        c *= _CloudMultiScatter.z;
+        scattered += contribution * exp(-opticalDepth * attenuation) * CloudDualPhase(cosTheta, phaseScale);
+        attenuation *= _CloudMultiScatter.x;
+        contribution *= _CloudMultiScatter.y * _CloudDensity.y;
+        phaseScale *= _CloudMultiScatter.z;
     }
-    return sum;
+    return scattered;
 }
 // Optical depth towards a directional source with exponentially growing steps.
 float CloudLightOpticalDepth(float3 positionWS, float3 positionKm, int steps, float3 lightDirection)
@@ -145,40 +146,6 @@ bool LineSphereIntersect(float3 origin, float3 direction, float radius, out floa
     }
     return hit;
 }
-// Segment of the view ray inside the cloud shell, in metres. False when the ray misses the layer or hits the ground first.
-bool CloudLayerSegment(float3 directionWS, out float tStart, out float tEnd)
-{
-    float3 cameraKm = AtmosphereCameraPlanetKm();
-    float r = _AtmosphereCamera.w;
-    float b0, b1, t0, t1;
-    bool hitBottom = LineSphereIntersect(cameraKm, directionWS, _AtmosphereRadii.z, b0, b1);
-    bool hitTop = LineSphereIntersect(cameraKm, directionWS, _AtmosphereRadii.w, t0, t1);
-    tStart = 0.0;
-    tEnd = 0.0;
-    bool valid = hitTop;
-    if (r < _AtmosphereRadii.z)
-    {
-        // Below the layer: rays that hit the ground first never reach it.
-        valid = valid && RaySphereIntersectNearest(cameraKm, directionWS, 0, _AtmosphereRadii.x) < 0.0;
-        tStart = max(b1, 0.0);
-        tEnd = t1;
-    }
-    else if (r <= _AtmosphereRadii.w)
-    {
-        tStart = 0.0;
-        tEnd = (hitBottom && b0 > 0.0) ? b0 : t1;
-    }
-    else
-    {
-        valid = valid && t0 >= 0.0;
-        tStart = t0;
-        tEnd = (hitBottom && b0 > 0.0) ? b0 : t1;
-    }
-    tStart *= 1000.0;
-    tEnd *= 1000.0;
-    return valid && tEnd > tStart;
-}
-
 struct CloudMarchResult
 {
     float3 radiance;      // premultiplied in-scattered radiance
@@ -199,7 +166,7 @@ CloudMarchResult MarchClouds(float3 directionWS, float jitter, int maxSteps, int
     if (valid) result.meanDistance = 0.5 * (tStart + tEnd);
     float3 cameraKm = AtmosphereCameraPlanetKm();
     float coarse = _CloudLayer.y / 32.0;
-    float t = tStart + jitter * coarse;
+    float t = tStart;
     bool fine = false;
     int empties = 0;
     float3 L = 0;
@@ -208,29 +175,30 @@ CloudMarchResult MarchClouds(float3 directionWS, float jitter, int maxSteps, int
     float distanceSum = 0.0, weightSum = 0.0;
     float cosTheta = dot(directionWS, _AtmosphereSun.xyz);
     float moonCosTheta = dot(directionWS, _MoonDirection.xyz);
-    float3 skyAmbient = _AtmosphereAmbient[0].rgb, horizonAmbient = _AtmosphereAmbient[1].rgb, groundAmbient = _AtmosphereAmbient[2].rgb;
-    float3 topAmbient = 0.5 * (skyAmbient + groundAmbient);
-    float3 bottomAmbient = 0.35 * (groundAmbient + horizonAmbient);
+    float3 skyAmbient = _AtmosphereAmbient[4].rgb, groundAmbient = _AtmosphereAmbient[5].rgb;
+    float3 topAmbient = skyAmbient;
+    float3 bottomAmbient = lerp(groundAmbient, skyAmbient, 0.6);
     float powderWeight = _CloudMultiScatter.w * saturate(0.5 - 0.5 * cosTheta);
     for (int i = 0; i < stepCount && t < tEnd; i++)
     {
         float growth = 1.0 + t * 0.001 * _CloudMarch.z;
-        float stepSize = (fine ? coarse * 0.33 : coarse) * growth;
-        float3 positionKm = cameraKm + directionWS * (t * 0.001);
+        float remainingDistance = tEnd - t;
+        float stepSize = min(remainingDistance, max((fine ? coarse * 0.33 : coarse) * growth, remainingDistance / (stepCount - i)));
+        float sampleDistance = t + saturate(jitter) * stepSize;
+        float3 positionKm = cameraKm + directionWS * (sampleDistance * 0.001);
         float h = CloudHeightFraction(positionKm);
         if (h < 0.0 || h > 1.0) { t += stepSize; continue; }
-        float3 positionWS = _AtmosphereCamera.xyz + directionWS * t;
+        float3 positionWS = _AtmosphereCamera.xyz + directionWS * sampleDistance;
         float4 weather;
         float density = CloudDensity(positionWS, h, fine, weather);
         if (density > 0.001)
         {
             if (!fine)
             {
-                // Step back and resample this interval with fine steps and detail noise.
                 fine = true;
-                t -= stepSize * 0.67;
-                continue;
+                density = CloudDensity(positionWS, h, true, weather);
             }
+            if (density <= 0.001) { t += stepSize; continue; }
             empties = 0;
             float sigmaT = density * _CloudDensity.x;
             float sigmaS = sigmaT * _CloudDensity.y;
@@ -258,12 +226,12 @@ CloudMarchResult MarchClouds(float3 directionWS, float jitter, int maxSteps, int
             }
             float3 ambient = lerp(bottomAmbient, topAmbient, h) * _CloudPhase.w * (1.0 - weather.b * _CloudDensity.z * (1.0 - h));
             // Dense cores receive less sky light than wisps, which gives overcast bases their structure.
-            ambient *= lerp(1.0, 0.4, saturate(density * 2.5));
+            ambient *= lerp(1.0, 0.85, saturate(density * 2.5));
             float3 S = sigmaS * (sunLight + moonLight + ambient);
             float stepTransmittance = exp(-sigmaT * stepSize);
             L += T * (S - S * stepTransmittance) / sigmaT;
             float absorbed = T * (1.0 - stepTransmittance);
-            distanceSum += t * absorbed;
+            distanceSum += sampleDistance * absorbed;
             weightSum += absorbed;
             T *= stepTransmittance;
             if (T < 0.005) break;

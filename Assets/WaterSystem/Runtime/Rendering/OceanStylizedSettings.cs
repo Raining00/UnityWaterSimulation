@@ -34,10 +34,25 @@ namespace WaterSystem.Ocean
         [Range(0, 2)] public float SunHighlight = 0.45f;
         [Range(0.04f, 0.7f)] public float Roughness = 0.24f;
         [Range(0, 0.08f)] public float RefractionStrength = 0.012f;
-        [Header("FFT whitecaps and depth intersection foam")]
+        [Header("Foam (FFT whitecaps and ship wakes)")]
         public Color FoamColor = new Color(0.93f, 0.99f, 1);
+        [Tooltip("Multiplies FFT and wake coverage before pattern erosion. Above 1 keeps foam solid for longer.")]
         [Range(0, 3)] public float FoamStrength = 1.25f;
+        [Tooltip("Pattern repetitions per metre. 0.125 corresponds to an 8 metre tile. Existing scene values are retained.")]
         [Min(0.001f)] public float FoamScale = 0.17f;
+        [Range(0.005f, 0.3f)] public float FoamEdgeSoftness = 0.045f;
+        [Range(0, 1)] public float FoamFineDetail = 0.32f;
+        [Range(0, 0.6f)] public float FoamBubbles = 0.2f;
+        [Range(0, 1.5f)] public float FoamClumping = 0.9f;
+        [Range(0, 1)] public float FoamReliefShading = 0.5f;
+        [Tooltip("Speed of the two lace layers creeping against each other. Zero freezes the pattern.")]
+        [Range(0, 4)] public float FoamAnimation = 1;
+        [Header("Aerated water below foam")]
+        public Color AerationColor = new Color(0.1f, 0.62f, 0.68f);
+        [Range(0, 1)] public float AerationStrength = 0.85f;
+        [Tooltip("Aeration implied by surface foam. Ship wakes also contribute their longer-lived bubble trail.")]
+        [Range(0, 1)] public float AerationFromFoam = 0.6f;
+        [Header("Depth intersection foam")]
         [Tooltip("Depth-based shore appearance only; does not simulate shallow-water dynamics.")]
         [Range(0, 2)] public float ShoreFoamStrength = 0.85f;
         [Min(0.01f)] public float ShoreFoamDepth = 1.3f;
@@ -72,15 +87,19 @@ namespace WaterSystem.Ocean
             material.SetFloat("_Roughness", Mathf.Clamp(Roughness, 0.04f, 0.7f));
             material.SetFloat("_RefractionStrength", Mathf.Clamp(RefractionStrength, 0, 0.08f));
             material.SetColor("_FoamColor", FoamColor);
-            material.SetFloat("_FoamStrength", Mathf.Max(0, FoamStrength));
-            material.SetFloat("_FoamScale", Mathf.Max(0.001f, FoamScale));
+            material.SetVector("_FoamPatternParams", new Vector4(1 / Mathf.Max(0.001f, FoamScale),
+                Mathf.Clamp01(FoamFineDetail), Mathf.Clamp(FoamBubbles, 0, 0.6f), Mathf.Clamp(FoamClumping, 0, 1.5f)));
+            material.SetVector("_FoamShadingParams", new Vector4(Mathf.Max(0, FoamStrength),
+                Mathf.Clamp(FoamEdgeSoftness, 0.005f, 0.3f), Mathf.Clamp01(FoamReliefShading), Mathf.Max(0, FoamAnimation)));
+            material.SetColor("_AerationColor", AerationColor);
+            material.SetVector("_AerationParams", new Vector4(Mathf.Clamp01(AerationStrength), Mathf.Clamp01(AerationFromFoam), 0, 0));
             material.SetVector("_ShoreFoam", new Vector4(Mathf.Max(0, ShoreFoamStrength), Mathf.Max(0.01f, ShoreFoamDepth), Mathf.Max(0.001f, ShoreNoiseScale), Mathf.Max(0, ShoreFlowSpeed)));
             material.SetFloat("_CausticScale", Mathf.Max(0.001f, CausticScale));
             material.SetFloat("_CausticStrength", Mathf.Max(0, CausticStrength));
             material.SetFloat("_CausticDepth", Mathf.Max(0.1f, CausticDepth));
             material.SetFloat("_UseSceneTextures", UseSceneTextures ? 1 : 0);
             material.SetTexture("_DetailNormal", resources.StylizedNormal);
-            material.SetTexture("_FoamTex", resources.StylizedFoam);
+            material.SetTexture("_FoamPattern", resources.FoamPattern);
             material.SetTexture("_ShoreNoise", resources.StylizedIntersection);
             material.SetTexture("_CausticTex", resources.StylizedCaustic);
             material.SetTexture("_SkyTex", resources.StylizedSky);

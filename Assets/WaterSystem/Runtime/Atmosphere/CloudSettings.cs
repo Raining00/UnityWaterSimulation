@@ -12,10 +12,10 @@ namespace WaterSystem.Ocean
         [Min(50)] public float BottomAltitude = 1500;
         [Min(100)] public float Thickness = 2600;
         [Header("Weather simulation")]
-        [Range(0, 1)] public float Coverage = 0.55f;
+        [Range(0, 1)] public float Coverage = 0.5f;
         [Tooltip("0 flat stratus, 1 towering cumulus.")]
-        [Range(0, 1)] public float CloudType = 0.6f;
-        [Range(0, 1)] public float TypeVariation = 0.7f;
+        [Range(0, 1)] public float CloudType = 0.85f;
+        [Range(0, 1)] public float TypeVariation = 0.3f;
         [Tooltip("World size (km) of one weather map tile.")]
         [Range(2, 400)] public float WeatherScale = 40;
         [Tooltip("Large weather cells per tile.")]
@@ -24,7 +24,7 @@ namespace WaterSystem.Ocean
         [Tooltip("How quickly formations build and dissolve.")]
         [Range(0, 5)] public float EvolutionSpeed = 1;
         [Tooltip("Darkens the base of thick clouds.")]
-        [Range(0, 1)] public float Precipitation = 0.35f;
+        [Range(0, 1)] public float Precipitation = 0.05f;
         [Header("Wind")]
         [Tooltip("Use the linked ocean's wind direction and speed.")]
         public bool FollowOceanWind = true;
@@ -33,25 +33,25 @@ namespace WaterSystem.Ocean
         public Vector2 WindDirection = new Vector2(1, 0.35f);
         [Tooltip("Metres per second when not following the ocean.")]
         [Min(0)] public float WindSpeed = 15;
-        [Tooltip("Extra drift of the upper part of the layer and of the detail noise.")]
+        [Tooltip("Maximum horizontal lean across the layer, relative to its thickness. Detail noise also drifts faster than the cloud body.")]
         [Range(0, 3)] public float WindShear = 0.6f;
         [Header("Shape")]
         [Tooltip("Metres covered by one repeat of the shape noise.")]
         [Min(200)] public float ShapeScale = 7000;
         [Tooltip("Metres covered by one repeat of the detail noise.")]
         [Min(20)] public float DetailScale = 900;
-        [Range(0, 1)] public float DetailStrength = 0.4f;
+        [Range(0, 1)] public float DetailStrength = 0.3f;
         [Tooltip("Extinction per metre at full density.")]
-        [Range(0.002f, 0.3f)] public float Extinction = 0.045f;
+        [Range(0.002f, 0.3f)] public float Extinction = 0.012f;
         [Header("Lighting")]
-        [Range(0.5f, 1)] public float Albedo = 0.96f;
+        [Range(0.5f, 1)] public float Albedo = 0.99f;
         [Range(0, 0.99f)] public float ForwardScattering = 0.75f;
         [Range(-0.99f, 0)] public float BackScattering = -0.3f;
         [Range(0, 1)] public float PhaseBlend = 0.35f;
         [Range(0, 3)] public float AmbientStrength = 1.2f;
         [Range(0, 1)] public float PowderStrength = 0.4f;
-        [Range(0.1f, 1)] public float MultiScatteringAttenuation = 0.5f;
-        [Range(0.1f, 1)] public float MultiScatteringContribution = 0.5f;
+        [Range(0.1f, 1)] public float MultiScatteringAttenuation = 0.35f;
+        [Range(0.1f, 1)] public float MultiScatteringContribution = 0.7f;
         [Range(0.1f, 1)] public float MultiScatteringPhaseDecay = 0.5f;
         [Range(0, 1)] public float WetnessDarkening = 0.6f;
         [Header("Quality")]
@@ -80,29 +80,29 @@ namespace WaterSystem.Ocean
         {
             BottomAltitude = Mathf.Max(50, AtmosphereSettings.Finite(BottomAltitude, 1500));
             Thickness = Mathf.Max(100, AtmosphereSettings.Finite(Thickness, 2600));
-            Coverage = Mathf.Clamp01(AtmosphereSettings.Finite(Coverage, 0.55f));
-            CloudType = Mathf.Clamp01(AtmosphereSettings.Finite(CloudType, 0.6f));
-            TypeVariation = Mathf.Clamp01(AtmosphereSettings.Finite(TypeVariation, 0.7f));
+            Coverage = Mathf.Clamp01(AtmosphereSettings.Finite(Coverage, 0.5f));
+            CloudType = Mathf.Clamp01(AtmosphereSettings.Finite(CloudType, 0.85f));
+            TypeVariation = Mathf.Clamp01(AtmosphereSettings.Finite(TypeVariation, 0.3f));
             WeatherScale = Mathf.Clamp(AtmosphereSettings.Finite(WeatherScale, 40), 2, 400);
             WeatherDetail = Mathf.Clamp(AtmosphereSettings.Finite(WeatherDetail, 4), 1, 8);
             CoverageSoftness = Mathf.Clamp(AtmosphereSettings.Finite(CoverageSoftness, 0.18f), 0.02f, 0.5f);
             EvolutionSpeed = Mathf.Clamp(AtmosphereSettings.Finite(EvolutionSpeed, 1), 0, 5);
-            Precipitation = Mathf.Clamp01(AtmosphereSettings.Finite(Precipitation, 0.35f));
+            Precipitation = Mathf.Clamp01(AtmosphereSettings.Finite(Precipitation, 0.05f));
             OceanWindMultiplier = Mathf.Clamp(AtmosphereSettings.Finite(OceanWindMultiplier, 2.5f), 0.1f, 6);
             WindSpeed = Mathf.Max(0, AtmosphereSettings.Finite(WindSpeed, 15));
             WindShear = Mathf.Clamp(AtmosphereSettings.Finite(WindShear, 0.6f), 0, 3);
             ShapeScale = Mathf.Max(200, AtmosphereSettings.Finite(ShapeScale, 7000));
             DetailScale = Mathf.Max(20, AtmosphereSettings.Finite(DetailScale, 900));
-            DetailStrength = Mathf.Clamp01(AtmosphereSettings.Finite(DetailStrength, 0.4f));
-            Extinction = Mathf.Clamp(AtmosphereSettings.Finite(Extinction, 0.045f), 0.002f, 0.3f);
-            Albedo = Mathf.Clamp(AtmosphereSettings.Finite(Albedo, 0.96f), 0.5f, 1);
+            DetailStrength = Mathf.Clamp01(AtmosphereSettings.Finite(DetailStrength, 0.3f));
+            Extinction = Mathf.Clamp(AtmosphereSettings.Finite(Extinction, 0.012f), 0.002f, 0.3f);
+            Albedo = Mathf.Clamp(AtmosphereSettings.Finite(Albedo, 0.99f), 0.5f, 1);
             ForwardScattering = Mathf.Clamp(AtmosphereSettings.Finite(ForwardScattering, 0.75f), 0, 0.99f);
             BackScattering = Mathf.Clamp(AtmosphereSettings.Finite(BackScattering, -0.3f), -0.99f, 0);
             PhaseBlend = Mathf.Clamp01(AtmosphereSettings.Finite(PhaseBlend, 0.35f));
             AmbientStrength = Mathf.Clamp(AtmosphereSettings.Finite(AmbientStrength, 1.2f), 0, 3);
             PowderStrength = Mathf.Clamp01(AtmosphereSettings.Finite(PowderStrength, 0.4f));
-            MultiScatteringAttenuation = Mathf.Clamp(AtmosphereSettings.Finite(MultiScatteringAttenuation, 0.5f), 0.1f, 1);
-            MultiScatteringContribution = Mathf.Clamp(AtmosphereSettings.Finite(MultiScatteringContribution, 0.5f), 0.1f, 1);
+            MultiScatteringAttenuation = Mathf.Clamp(AtmosphereSettings.Finite(MultiScatteringAttenuation, 0.35f), 0.1f, 1);
+            MultiScatteringContribution = Mathf.Clamp(AtmosphereSettings.Finite(MultiScatteringContribution, 0.7f), 0.1f, 1);
             MultiScatteringPhaseDecay = Mathf.Clamp(AtmosphereSettings.Finite(MultiScatteringPhaseDecay, 0.5f), 0.1f, 1);
             WetnessDarkening = Mathf.Clamp01(AtmosphereSettings.Finite(WetnessDarkening, 0.6f));
             Downsample = Mathf.Clamp(Downsample, 1, 4);

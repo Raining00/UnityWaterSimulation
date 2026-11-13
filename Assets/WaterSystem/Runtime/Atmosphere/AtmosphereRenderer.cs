@@ -161,10 +161,29 @@ namespace WaterSystem.Ocean
         [ContextMenu("Rebuild Atmosphere Tables")]
         public void RequestRebuild()
         {
+            forceNewFrame = true;
             lutHash = 0;
             noiseReady = false;
             failed = false;
             foreach (var state in cameras.Values) state.HistoryValid = false;
+        }
+        public void ApplyFairWeatherClouds()
+        {
+            Clouds ??= new CloudSettings();
+            var preset = new CloudSettings();
+            Clouds.Enabled = true;
+            Clouds.Coverage = preset.Coverage;
+            Clouds.CloudType = preset.CloudType;
+            Clouds.TypeVariation = preset.TypeVariation;
+            Clouds.Precipitation = preset.Precipitation;
+            Clouds.DetailStrength = preset.DetailStrength;
+            Clouds.Extinction = preset.Extinction;
+            Clouds.Albedo = preset.Albedo;
+            Clouds.AmbientStrength = preset.AmbientStrength;
+            Clouds.MultiScatteringAttenuation = preset.MultiScatteringAttenuation;
+            Clouds.MultiScatteringContribution = preset.MultiScatteringContribution;
+            Clouds.MultiScatteringPhaseDecay = preset.MultiScatteringPhaseDecay;
+            RequestRebuild();
         }
         /// <summary>Treat the next camera as a new frame even if Time.frameCount has not advanced (offline rendering).</summary>
         public void InvalidateFrame() => forceNewFrame = true;
@@ -295,8 +314,9 @@ namespace WaterSystem.Ocean
             detailNoise ??= AtmosphereCameraState.Create("Clouds / Detail noise", DetailNoiseSize, DetailNoiseSize, DetailNoiseSize, GraphicsFormat.R8G8B8A8_UNorm, TextureDimension.Tex3D, FilterMode.Bilinear, TextureWrapMode.Repeat);
             if (ambientBuffer == null)
             {
-                ambientBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 4, 16);
-                ambientBuffer.SetData(new[] { new Vector4(0.3f, 0.4f, 0.55f, 1), new Vector4(0.25f, 0.3f, 0.35f, 1), new Vector4(0.08f, 0.1f, 0.12f, 1), Vector4.one });
+                ambientBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 6, 16);
+                ambientBuffer.SetData(new[] { new Vector4(0.3f, 0.4f, 0.55f, 1), new Vector4(0.25f, 0.3f, 0.35f, 1), new Vector4(0.08f, 0.1f, 0.12f, 1), Vector4.one,
+                    new Vector4(0.3f, 0.4f, 0.55f, 1), new Vector4(0.08f, 0.1f, 0.12f, 1) });
             }
             if (skyCubemap == null || skyCubemapFaces == null || skyCubemap.width != Clouds.ReflectionResolution)
             {
@@ -471,6 +491,7 @@ namespace WaterSystem.Ocean
             {
                 commands.SetComputeTextureParam(lutShader, transmittanceKernel.Index, AtmosphereShaderIDs.TransmittanceOutput, transmittanceLUT);
                 transmittanceKernel.Dispatch(commands, lutShader, 256, 64, 1);
+                commands.SetComputeTextureParam(lutShader, multiScatterKernel.Index, AtmosphereShaderIDs.TransmittanceLUT, transmittanceLUT);
                 commands.SetComputeTextureParam(lutShader, multiScatterKernel.Index, AtmosphereShaderIDs.MultiScatterOutput, multiScatterLUT);
                 multiScatterKernel.Dispatch(commands, lutShader, 32, 32, 64);
                 lutHash = hash;
@@ -585,10 +606,12 @@ namespace WaterSystem.Ocean
             // OpenGL clip convention on both sides: URP screen UVs are Y-up NDC, which this matches without platform flips.
             state.ViewProjection = camera.projectionMatrix * camera.worldToCameraMatrix;
             state.InverseViewProjection = state.ViewProjection.inverse;
+            BindAtmosphereTables(lutShader, skyViewKernel);
             commands.SetComputeTextureParam(lutShader, skyViewKernel.Index, AtmosphereShaderIDs.SkyViewOutput, state.SkyView);
             skyViewKernel.Dispatch(commands, lutShader, SkyViewWidth, SkyViewHeight, 1);
             commands.SetGlobalTexture(AtmosphereShaderIDs.SkyViewLUT, state.SkyView);
             commands.SetComputeMatrixParam(lutShader, AtmosphereShaderIDs.InverseViewProjection, state.InverseViewProjection);
+            BindAtmosphereTables(lutShader, aerialKernel);
             commands.SetComputeTextureParam(lutShader, aerialKernel.Index, AtmosphereShaderIDs.AerialOutput, state.Aerial);
             aerialKernel.Dispatch(commands, lutShader, AerialSize, AerialSize, AerialSize);
             commands.SetGlobalTexture(AtmosphereShaderIDs.AerialLUT, state.Aerial);
@@ -597,8 +620,17 @@ namespace WaterSystem.Ocean
         // Camera-independent sky products that need a sky-view LUT: computed once per frame from the first camera.
         void RecordFrameSky(Camera camera)
         {
+            var state = GetState(camera);
+            commands.SetComputeTextureParam(lutShader, ambientKernel.Index, AtmosphereShaderIDs.SkyViewLUT, state.SkyView);
+            commands.SetComputeTextureParam(lutShader, ambientKernel.Index, AtmosphereShaderIDs.TransmittanceLUT, transmittanceLUT);
+            commands.SetComputeTextureParam(lutShader, ambientKernel.Index, AtmosphereShaderIDs.CloudPanorama, cloudPanorama);
+            commands.SetComputeTextureParam(lutShader, cubemapKernel.Index, AtmosphereShaderIDs.SkyViewLUT, state.SkyView);
+            commands.SetComputeTextureParam(lutShader, cubemapKernel.Index, AtmosphereShaderIDs.TransmittanceLUT, transmittanceLUT);
+            commands.SetComputeTextureParam(lutShader, cubemapKernel.Index, AtmosphereShaderIDs.CloudPanorama, cloudPanorama);
             if (cloudsActive)
             {
+                BindAtmosphereTables(cloudShader, panoramaKernel);
+                BindCloudNoise(panoramaKernel);
                 commands.SetComputeVectorParam(cloudShader, AtmosphereShaderIDs.CloudPanoramaSize, new Vector4(PanoramaWidth, PanoramaHeight, 0, 0));
                 commands.SetComputeBufferParam(cloudShader, panoramaKernel.Index, AtmosphereShaderIDs.Ambient, ambientBuffer);
                 commands.SetComputeTextureParam(cloudShader, panoramaKernel.Index, AtmosphereShaderIDs.CloudPanoramaOutput, cloudPanorama);
@@ -616,6 +648,7 @@ namespace WaterSystem.Ocean
             bool shadows = cloudsActive && Clouds.CastShadows && activeSun != null;
             if (shadows)
             {
+                BindCloudNoise(shadowKernel);
                 shadowExtent = Clouds.ShadowExtent;
                 Matrix4x4 worldToLight = activeSun.transform.worldToLocalMatrix;
                 Vector3 centerLocal = worldToLight.MultiplyPoint3x4(camera.transform.position);
@@ -642,6 +675,8 @@ namespace WaterSystem.Ocean
             int width = Mathf.Max(8, camera.pixelWidth / Clouds.Downsample);
             int height = Mathf.Max(8, camera.pixelHeight / Clouds.Downsample);
             state.EnsureCloudBuffers(width, height);
+            BindAtmosphereTables(cloudShader, marchKernel);
+            BindCloudNoise(marchKernel);
             LastCloudBufferSize = new Vector2Int(width, height);
             int jitterIndex = (state.JitterIndex++ & 15) + 1;
             var jitter = new Vector2(AtmosphereMath.Halton(jitterIndex, 2) - 0.5f, AtmosphereMath.Halton(jitterIndex, 3) - 0.5f);
@@ -667,6 +702,19 @@ namespace WaterSystem.Ocean
             state.PreviousViewProjection = state.ViewProjection;
             commands.SetGlobalTexture(AtmosphereShaderIDs.CloudBuffer, state.History[write]);
             state.Properties.SetTexture(AtmosphereShaderIDs.CloudBuffer, state.History[write]);
+        }
+
+        void BindAtmosphereTables(ComputeShader shader, Kernel kernel)
+        {
+            commands.SetComputeTextureParam(shader, kernel.Index, AtmosphereShaderIDs.TransmittanceLUT, transmittanceLUT);
+            commands.SetComputeTextureParam(shader, kernel.Index, AtmosphereShaderIDs.MultiScatterLUT, multiScatterLUT);
+        }
+
+        void BindCloudNoise(Kernel kernel)
+        {
+            commands.SetComputeTextureParam(cloudShader, kernel.Index, AtmosphereShaderIDs.CloudShapeNoise, shapeNoise);
+            commands.SetComputeTextureParam(cloudShader, kernel.Index, AtmosphereShaderIDs.CloudDetailNoise, detailNoise);
+            commands.SetComputeTextureParam(cloudShader, kernel.Index, AtmosphereShaderIDs.CloudWeatherMap, weatherMap);
         }
 
         void IssueDraws(Camera camera, AtmosphereCameraState state)

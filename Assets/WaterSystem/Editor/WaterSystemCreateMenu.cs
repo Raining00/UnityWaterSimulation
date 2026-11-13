@@ -6,6 +6,16 @@ namespace WaterSystem.Ocean.Editor
     /// <summary>Hierarchy creation commands. Project settings and shared assets are authored separately.</summary>
     public static class WaterSystemCreateMenu
     {
+        [MenuItem("CONTEXT/AtmosphereRenderer/Apply Fair Weather Clouds")]
+        static void ApplyFairWeatherClouds(MenuCommand command)
+        {
+            var atmosphere = (AtmosphereRenderer)command.context;
+            Undo.RecordObject(atmosphere, "Apply Fair Weather Clouds");
+            atmosphere.ApplyFairWeatherClouds();
+            PrefabUtility.RecordPrefabInstancePropertyModifications(atmosphere);
+            EditorUtility.SetDirty(atmosphere);
+        }
+
         [MenuItem("GameObject/Water System/Ocean", false, 10)]
         public static void CreateOcean(MenuCommand command)
         {

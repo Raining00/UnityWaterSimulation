@@ -16,6 +16,7 @@ namespace WaterSystem.Ocean
 
         // The newest sample follows the hull, so one slot is kept for it on top of the stored trail.
         const int MaxStoredNodes = 63;
+        const float Gravity = 9.81f;
 
         [Header("Foam (coverage reached at the reference speed; above 1 stays solid for longer)")]
         [Min(0)] public float SideFoamScale = 0.72f;
@@ -41,7 +42,10 @@ namespace WaterSystem.Ocean
         struct TrailNode
         {
             public Vector2 Position;
-            public float Strength;    // Wave-making strength when the hull was here, 0..1.
+            public Vector2 Backward;    // Opposite to the direction of travel when the hull was here.
+            public float Strength;      // Wave-making strength when the hull was here, 0..1.
+            public float Wavenumber;    // g / U^2 of the waves this stretch was made with, in 1/m.
+            public float Phase;         // Where in the wave pattern this stretch is now, in radians of its transverse waves.
             public float BirthTime;
         }
 
@@ -52,7 +56,7 @@ namespace WaterSystem.Ocean
         Rigidbody body;
         Vector2 direction = Vector2.up;   // Smoothed horizontal direction of travel.
         Vector2 origin, hullCentre;
-        float speed, strength, patternSpeed, overtake, hullLength = 1;
+        float speed, strength, patternSpeed, headWavenumber, headPhase, slack, hullLength = 1;
         int steppedFrame = -1;
 
         internal OceanRenderer Ocean => buoyancy != null ? ((IOceanSurfaceQueryClient)buoyancy).Ocean : null;
@@ -84,12 +88,13 @@ namespace WaterSystem.Ocean
         void ResetTrail()
         {
             trail.Clear();
-            patternSpeed = overtake = speed = strength = 0;
+            patternSpeed = headWavenumber = headPhase = slack = speed = strength = 0;
             steppedFrame = -1;
         }
 
         /// <summary>Advances the trail once per rendered frame. Returns false while the emitter has nothing to describe.</summary>
-        internal bool Step(float deltaTime, float time)
+        /// <param name="shortestWavelength">Shortest wave in metres that the wake window can still resolve.</param>
+        internal bool Step(float deltaTime, float time, float shortestWavelength)
         {
             if (buoyancy == null || motor == null || body == null) return false;
             if (steppedFrame == Time.frameCount) return true;
@@ -111,28 +116,118 @@ namespace WaterSystem.Ocean
             hullCentre = new Vector2(centre.x, centre.z);
             origin = hullCentre + direction * (WaveOrigin * hullLength);
 
+            // The waves that keep pace with a hull are 2 pi U^2 / g long, so a slow hull makes short
+            // ones. Below the speed whose waves the wake window can still resolve it makes none, and
+            // from there they grow in gradually: wave making is weak long before it is strong.
+            float slowest = Mathf.Sqrt(Gravity * Mathf.Max(shortestWavelength, 0.01f) / (2 * Mathf.PI));
+            float reference = Mathf.Max(ForwardSpeedReference, 0.1f);
             bool afloat = buoyancy.CurrentSubmergedVolume >= MinimumSubmergedVolume;
-            float speed01 = Mathf.Clamp01(speed / Mathf.Max(ForwardSpeedReference, 0.1f));
-            strength = afloat ? speed01 * Mathf.Sqrt(speed01) : 0;
+            float speed01 = Mathf.Clamp01(speed / reference);
+            float making = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(slowest, Mathf.Max(reference, 1.5f * slowest), speed));
+            strength = afloat ? speed01 * Mathf.Sqrt(speed01) * making : 0;
 
-            // Waves keep the speed they were made with. The pattern follows an accelerating hull quickly
-            // but a braking one slowly, and whatever the hull loses against it lets the pattern run on
-            // past the stern - the way a real wake catches up with a boat that stops.
-            float follow = speed > patternSpeed ? 1.5f : 0.3f;
-            patternSpeed = Mathf.Lerp(patternSpeed, speed, 1 - Mathf.Exp(-deltaTime * follow));
-            if (patternSpeed > speed) overtake += (patternSpeed - speed) * deltaTime;
-            else overtake *= Mathf.Exp(-deltaTime * speed / hullLength);
+            // The speed that sets the wavelength of what the hull lays down NOW. Waves already on the
+            // water keep the wavelength they were made with (TrailNode.Wavenumber): rescaling a whole
+            // wake to the current speed of the hull would squeeze it into ripples whenever the hull
+            // stops. The speed follows the hull up closely and down slowly, and holds once the hull is
+            // too slow to make waves, so braking does not end the wake in a tail of ever shorter ones.
+            if (speed > patternSpeed) patternSpeed = Mathf.Lerp(patternSpeed, speed, 1 - Mathf.Exp(-deltaTime * 6f));
+            else if (speed >= slowest) patternSpeed = Mathf.Lerp(patternSpeed, speed, 1 - Mathf.Exp(-deltaTime * 0.3f));
+            float waveSpeed = Mathf.Max(patternSpeed, slowest);
+            headWavenumber = Gravity / (waveSpeed * waveSpeed);
 
             float spacing = 0.3f * hullLength;
             if (trail.Count > 0 && (trail[trail.Count - 1].Position - origin).sqrMagnitude > 25 * spacing * spacing)
                 trail.Clear();   // Teleported: an old trail must not stretch across the jump.
+
+            float share = AdvanceWake(deltaTime, time);
+            JoinWake(share, deltaTime, time);
             if (trail.Count == 0 || (trail[trail.Count - 1].Position - origin).sqrMagnitude >= spacing * spacing)
-            {
-                if (trail.Count == MaxStoredNodes) trail.RemoveAt(0);
-                trail.Add(new TrailNode { Position = origin, Strength = strength, BirthTime = time });
-            }
+                AddNode(strength, headPhase, time);
             while (trail.Count > 1 && time - trail[0].BirthTime > WaveLifetime) trail.RemoveAt(0);
             return true;
+        }
+
+        /// <summary>
+        /// Moves the waves that are already on the water. They no longer depend on the hull: every
+        /// stretch advances through the pattern at the beat of the visible wake, which keeps its
+        /// crests rolling on at their own speed after the hull has slowed down or stopped.
+        /// Returns how much of that beat the hull itself sets, 0..1.
+        /// </summary>
+        float AdvanceWake(float deltaTime, float time)
+        {
+            float weight = 0, beat = 0, peak = 0;
+            for (int i = 0; i < trail.Count; i++)
+            {
+                TrailNode node = trail[i];
+                float visible = node.Strength * AgeFade(time - node.BirthTime);
+                weight += visible;
+                // Deep-water waves of wavenumber k pass a fixed point at sqrt(g k) radians per second.
+                beat += visible * Mathf.Sqrt(Gravity * node.Wavenumber);
+                peak = Mathf.Max(peak, visible);
+            }
+            // A hull that makes waves as large as those behind it leads; a hull that has stopped
+            // making waves leaves the beat to the wake.
+            float headBeat = Mathf.Sqrt(Gravity * headWavenumber);
+            float share = peak > 1e-3f ? Mathf.Clamp01(strength / peak) : 1;
+            float clock = weight > 1e-3f ? Mathf.Lerp(beat / weight, headBeat, share) : headBeat;
+            for (int i = 0; i < trail.Count; i++)
+            {
+                TrailNode node = trail[i];
+                // The pattern is blank long before this limit; it only keeps the last sample of a resting hull finite.
+                node.Phase = Mathf.Min(node.Phase + clock * deltaTime, 4096f);
+                trail[i] = node;
+            }
+            return share;
+        }
+
+        /// <summary>Finds the phase at the hull: where in the pattern the waves it makes now begin.</summary>
+        void JoinWake(float share, float deltaTime, float time)
+        {
+            headPhase = 0;
+            if (trail.Count == 0) return;
+            TrailNode newest = trail[trail.Count - 1];
+            // The phase with which the waves of the hull would join those behind it without a seam.
+            // It is zero for a hull at steady speed, and grows when the wake runs on past a slower hull.
+            float continuity = newest.Phase -
+                0.5f * (headWavenumber + newest.Wavenumber) * (origin - newest.Position).magnitude;
+            if (newest.Strength <= 0)
+            {
+                // Flat water behind the hull: there is nothing to join, so its waves start at the hull.
+                // When it gets under way again after a rest, a silent sample at the hull keeps the gap
+                // between the phase of the old wake and that of the new one inside water without waves.
+                if (strength > 0 && continuity > 0.5f)
+                {
+                    AddNode(0, 0, time);
+                    continuity = 0;
+                }
+                slack = continuity;
+            }
+            else
+            {
+                // The hull still trails waves of its own. As it makes larger ones again they have to
+                // start at the hull, so the seam is given up gradually and spread thinly along the new
+                // stretch, instead of being closed by dragging the old crests backwards.
+                slack = Mathf.Min(Mathf.Max(continuity, 0), slack + 0.3f * headWavenumber * speed * share * deltaTime);
+            }
+            headPhase = Mathf.Max(0, continuity - slack);
+        }
+
+        void AddNode(float nodeStrength, float phase, float time)
+        {
+            if (trail.Count == MaxStoredNodes) trail.RemoveAt(0);
+            trail.Add(new TrailNode
+            {
+                Position = origin, Backward = -direction, Strength = nodeStrength,
+                Wavenumber = headWavenumber, Phase = phase, BirthTime = time
+            });
+            slack = 0;
+        }
+
+        float AgeFade(float age)
+        {
+            float t = Mathf.Clamp01(age / Mathf.Max(1, WaveLifetime));
+            return 1 - t * t * (3 - 2 * t);
         }
 
         /// <summary>Appends this ship's wave trail and foam deposits in the layout of WakeDeposit.compute.</summary>
@@ -145,58 +240,53 @@ namespace WaterSystem.Ocean
             int start = nodes.Count;
             // Newest first: the live head, then the stored samples from young to old.
             // The live head must follow every rendered pose, independently of stored-node spacing.
-            // A hull-relative distance threshold here freezes the whole Kelvin phase near each new
-            // sample, then jumps it forward when the hull has moved far enough.
-            nodes.Add(new WakeNode { Position = origin, Amplitude = strength, Breaking = strength * strength });
+            // A sample born this frame coincides with it and shares its direction, so the wedge
+            // between the two is empty and needs no special case.
+            nodes.Add(new WakeNode
+            {
+                Position = origin, Backward = -direction, Phase = headPhase, Amplitude = strength * height,
+                Breaking = strength * strength * CrestFoam, Wavenumber = headWavenumber
+            });
+            float peak = strength * height;
+            float reach = OceanWakeSystem.KelvinReach(headWavenumber, hullLength);
+            Vector2 sum = origin;
             for (int i = trail.Count - 1; i >= 0; i--)
             {
                 TrailNode sample = trail[i];
-                // On the exact frame a stored node is born it coincides with the live head.
-                // Skip only coincident neighbours, avoiding zero-length wedges without quantizing motion.
-                if ((sample.Position - nodes[nodes.Count - 1].Position).sqrMagnitude <= 1e-8f) continue;
-                float age = Mathf.Clamp01((time - sample.BirthTime) / Mathf.Max(1, WaveLifetime));
-                float fade = 1 - age * age * (3 - 2 * age);
+                float age = time - sample.BirthTime;
+                float amplitude = sample.Strength * AgeFade(age) * height;
                 // Only the first seconds of a wave are steep enough to spill.
-                float young = Mathf.Clamp01(1 - (time - sample.BirthTime) / 2.5f);
+                float young = Mathf.Clamp01(1 - age / 2.5f);
                 nodes.Add(new WakeNode
                 {
-                    Position = sample.Position, Amplitude = sample.Strength * fade,
-                    Breaking = sample.Strength * sample.Strength * young * young
+                    Position = sample.Position, Backward = sample.Backward, Phase = sample.Phase, Amplitude = amplitude,
+                    Breaking = sample.Strength * sample.Strength * young * young * CrestFoam, Wavenumber = sample.Wavenumber
                 });
+                sum += sample.Position;
+                if (amplitude <= 1e-4f) continue;
+                peak = Mathf.Max(peak, amplitude);
+                reach = Mathf.Max(reach, OceanWakeSystem.KelvinReach(sample.Wavenumber, hullLength));
             }
             int count = nodes.Count - start;
-            if (count < 2) { nodes.RemoveRange(start, count); return; }
-
-            float travelled = overtake, peak = 0;
-            Vector2 sum = Vector2.zero;
-            for (int i = 0; i < count; i++)
-            {
-                WakeNode node = nodes[start + i];
-                if (i > 0) travelled += (node.Position - nodes[start + i - 1].Position).magnitude;
-                // Chord directions keep the lines drawn across the trail consistent with its bends.
-                Vector2 chord = nodes[start + Mathf.Min(i + 1, count - 1)].Position - nodes[start + Mathf.Max(i - 1, 0)].Position;
-                node.Backward = chord.sqrMagnitude > 1e-6f ? chord.normalized : -direction;
-                node.Distance = travelled;
-                node.Breaking *= CrestFoam;
-                node.Amplitude *= height;
-                peak = Mathf.Max(peak, node.Amplitude);
-                sum += node.Position;
-                nodes[start + i] = node;
-            }
             if (peak <= 1e-4f) { nodes.RemoveRange(start, count); return; }
 
-            float froude = Mathf.Max(patternSpeed, 0.05f) / Mathf.Sqrt(9.81f * hullLength);
-            OceanWakeSystem.ResolveKelvinSlice(froude, out float slice, out float scaleLow, out float scaleHigh);
             Vector2 boundsCentre = sum / count;
             float radius = 0;
             for (int i = 0; i < count; i++)
-                radius = Mathf.Max(radius, (nodes[start + i].Position - boundsCentre).magnitude);
-            // The pattern reaches further sideways when it is read at a smaller scale.
-            radius += OceanWakeSystem.KelvinWidthExtent * hullLength / Mathf.Max(0.05f, Mathf.Min(scaleLow, scaleHigh));
+            {
+                WakeNode node = nodes[start + i];
+                radius = Mathf.Max(radius, (node.Position - boundsCentre).magnitude);
+                // How fast the trail turns here, from the samples on either side. The kernel uses it to
+                // tell where the inside of a turn squeezes the pattern (see BuildWakeWaves).
+                WakeNode newer = nodes[start + Mathf.Max(i - 1, 0)], older = nodes[start + Mathf.Min(i + 1, count - 1)];
+                float turn = newer.Backward.x * older.Backward.y - newer.Backward.y * older.Backward.x;
+                node.Curvature = turn / Mathf.Max((older.Position - newer.Position).magnitude, 0.3f * hullLength);
+                nodes[start + i] = node;
+            }
             ships.Add(new WakeShip
             {
-                BoundsCentre = boundsCentre, BoundsRadius = radius, HullLength = hullLength,
-                Slice = slice, ScaleLow = scaleLow, ScaleHigh = scaleHigh, NodeStart = start, NodeCount = count
+                BoundsCentre = boundsCentre, BoundsRadius = radius + reach, HullLength = hullLength,
+                NodeStart = start, NodeCount = count
             });
         }
 

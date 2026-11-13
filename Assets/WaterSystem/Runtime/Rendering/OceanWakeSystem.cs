@@ -16,10 +16,18 @@ namespace WaterSystem.Ocean
     {
         // Layout of KelvinWakeAtlas.exr. Must match Tools/WaterTextures/generate_kelvin_wake.py.
         static readonly float[] KelvinFroude = { 0.28f, 0.345f, 0.424f, 0.522f, 0.643f, 0.791f, 0.974f, 1.2f };
+        // The same table as the kernel reads it: float4 _KelvinFroude[2].
+        static readonly Vector4[] KelvinFroudeVectors =
+        {
+            new Vector4(KelvinFroude[0], KelvinFroude[1], KelvinFroude[2], KelvinFroude[3]),
+            new Vector4(KelvinFroude[4], KelvinFroude[5], KelvinFroude[6], KelvinFroude[7])
+        };
         internal const float KelvinLengthExtent = 16f, KelvinWidthExtent = 5.8f;
         const int KelvinRows = 192;
         // Seconds without any ship input after which the history has decayed to nothing and updates stop.
         const float IdleSeconds = 45f;
+        // Window texels a ship wave needs per wavelength. Hulls too slow to make waves that long make none.
+        const float TexelsPerWave = 6f;
 
         static readonly int NodesId = Shader.PropertyToID("_WakeNodes");
         static readonly int ShipsId = Shader.PropertyToID("_WakeShips");
@@ -28,6 +36,7 @@ namespace WaterSystem.Ocean
         static readonly int SplatCountId = Shader.PropertyToID("_WakeSplatCount");
         static readonly int KelvinAtlasId = Shader.PropertyToID("_KelvinAtlas");
         static readonly int KelvinLayoutId = Shader.PropertyToID("_KelvinLayout");
+        static readonly int KelvinFroudeId = Shader.PropertyToID("_KelvinFroude");
         static readonly int WaveResultId = Shader.PropertyToID("_WakeWaveResult");
         static readonly int WavesId = Shader.PropertyToID("_WakeWaves");
         static readonly int PreviousId = Shader.PropertyToID("_PreviousWake");
@@ -84,19 +93,17 @@ namespace WaterSystem.Ocean
             Resolution = Mathf.Clamp(Mathf.ClosestPowerOfTwo(Mathf.Max(1, Resolution)), 256, 2048);
         }
 
-        /// <summary>Picks the two atlas slices that bracket a Froude number, and the scale each is read at.</summary>
-        internal static void ResolveKelvinSlice(float froude, out float slice, out float scaleLow, out float scaleHigh)
+        /// <summary>
+        /// Furthest distance from the trail, in metres, at which a stretch of wake still shows waves.
+        /// The kernel picks the atlas slices from the stretch's own wavenumber (see SampleKelvin).
+        /// </summary>
+        internal static float KelvinReach(float wavenumber, float hullLength)
         {
-            int last = KelvinFroude.Length - 1;
+            float froude = 1f / Mathf.Sqrt(Mathf.Max(wavenumber * hullLength, 1e-6f));
             int lower = 0;
-            while (lower < last - 1 && froude >= KelvinFroude[lower + 1]) lower++;
-            // Slices are spaced geometrically, so blend in the logarithm; outside the table the nearest
-            // slice is kept and only its scale changes.
-            float weight = Mathf.Clamp01(Mathf.Log(froude / KelvinFroude[lower]) / Mathf.Log(KelvinFroude[lower + 1] / KelvinFroude[lower]));
-            // Stay below the next integer: the kernel takes floor(slice) as the slice scaleLow belongs to.
-            slice = lower + Mathf.Min(weight, 0.9999f);
-            scaleLow = KelvinFroude[lower] * KelvinFroude[lower] / (froude * froude);
-            scaleHigh = KelvinFroude[lower + 1] * KelvinFroude[lower + 1] / (froude * froude);
+            while (lower < KelvinFroude.Length - 2 && froude >= KelvinFroude[lower + 1]) lower++;
+            // Of the two slices that are blended, the lower one is read at the smaller scale and reaches further.
+            return KelvinWidthExtent / Mathf.Max(wavenumber * KelvinFroude[lower] * KelvinFroude[lower], 1e-6f);
         }
 
         /// <summary>
@@ -118,7 +125,7 @@ namespace WaterSystem.Ocean
                 if (emitter == null || !emitter.isActiveAndEnabled) continue;
                 var ocean = emitter.Ocean;
                 if (ocean != null && ocean != owner) continue;
-                if (!emitter.Step(deltaTime, time)) continue;
+                if (!emitter.Step(deltaTime, time, TexelsPerWave * WorldSize / Mathf.Max(Resolution, 1))) continue;
                 emitter.AppendWake(nodes, ships, splats, time, WaveScale);
                 // Most of a wake lies behind its ship, so the window leads with the stern side.
                 focus += emitter.HullCentre - emitter.Direction * (0.2f * WorldSize);
@@ -154,8 +161,8 @@ namespace WaterSystem.Ocean
             var kelvin = OceanResources.Load().KelvinWake;
             int shipCount = kelvin != null ? Mathf.Min(ships.Count, 16) : 0;
             int splatCount = Mathf.Min(splats.Count, 256);
-            Upload(ref nodeBuffer, nodes, nodes.Count, 32);
-            Upload(ref shipBuffer, ships, shipCount, 48);
+            Upload(ref nodeBuffer, nodes, nodes.Count, 48);
+            Upload(ref shipBuffer, ships, shipCount, 32);
             Upload(ref splatBuffer, splats, splatCount, 32);
 
             commands.SetComputeVectorParam(shader, WindowId, new Vector4(nextOrigin.x, nextOrigin.y, texel, Resolution));
@@ -173,6 +180,7 @@ namespace WaterSystem.Ocean
                 commands.SetComputeTextureParam(shader, waveKernel, KelvinAtlasId, kelvin != null ? kelvin : Texture2D.blackTexture);
                 commands.SetComputeVectorParam(shader, KelvinLayoutId,
                     new Vector4(KelvinLengthExtent, KelvinWidthExtent, KelvinFroude.Length, KelvinRows));
+                commands.SetComputeVectorArrayParam(shader, KelvinFroudeId, KelvinFroudeVectors);
                 commands.SetComputeTextureParam(shader, waveKernel, OceanFFTShaderIDs.Displacement, surface.Displacement);
                 commands.SetComputeTextureParam(shader, waveKernel, WaveResultId, waves);
                 commands.DispatchCompute(shader, waveKernel, groups, groups, 1);
@@ -305,10 +313,12 @@ namespace WaterSystem.Ocean
     {
         public Vector2 Position;
         public Vector2 Backward;
-        public float Distance;
+        public float Phase;
         public float Amplitude;
         public float Breaking;
-        public float Padding;
+        public float Wavenumber;
+        public float Curvature;
+        public Vector3 Padding;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -317,12 +327,9 @@ namespace WaterSystem.Ocean
         public Vector2 BoundsCentre;
         public float BoundsRadius;
         public float HullLength;
-        public float Slice;
-        public float ScaleLow;
-        public float ScaleHigh;
         public float NodeStart;
         public float NodeCount;
-        public Vector3 Padding;
+        public Vector2 Padding;
     }
 
     [StructLayout(LayoutKind.Sequential)]

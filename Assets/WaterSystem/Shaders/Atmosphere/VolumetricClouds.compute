@@ -90,7 +90,7 @@ void CloudResolve(uint3 id : SV_DispatchThreadID)
     _CloudHistoryDepthOut[id.xy] = resultDistance;
 }
 
-// Low-cost march over the upper hemisphere from the camera position, used by reflections and ambient.
+// Low-cost full-sphere march from the camera position, used by reflections and ambient.
 [numthreads(8,8,1)]
 void CloudPanorama(uint3 id : SV_DispatchThreadID)
 {

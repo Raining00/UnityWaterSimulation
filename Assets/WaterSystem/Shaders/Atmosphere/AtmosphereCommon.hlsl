@@ -83,7 +83,8 @@ float RaySphereIntersectNearest(float3 r0, float3 rd, float3 s0, float sR)
 bool RaySphereIntersect(float3 r0, float3 rd, float sR, out float t0, out float t1)
 {
     float b = dot(r0, rd);
-    float c = dot(r0, r0) - sR * sR;
+    float originRadius = length(r0);
+    precise float c = (originRadius - sR) * (originRadius + sR);
     float delta = b * b - c;
     t0 = -1.0;
     t1 = -1.0;
@@ -389,25 +390,26 @@ float3 AtmosphereSkyRadiance(float3 worldDir)
 {
     return SampleSkyView(worldDir) + _AtmosphereNight.xyz;
 }
-// Panorama lookup: u azimuth, v = sqrt of elevation sine (more rows near the horizon).
+// Panorama lookup: u azimuth, v signed square-root elevation over both hemispheres.
 float2 CloudPanoramaUv(float3 worldDir)
 {
-    float u = atan2(worldDir.x, worldDir.z) / (2.0 * PI) + 0.5;
-    float v = sqrt(saturate((worldDir.y + 0.02) / 1.02));
+    float u = dot(worldDir.xz, worldDir.xz) > 1e-8 ? atan2(worldDir.x, worldDir.z) / (2.0 * PI) + 0.5 : 0.5;
+    float v = 0.5 + 0.5 * sign(worldDir.y) * sqrt(saturate(abs(worldDir.y)));
     return float2(u, v);
 }
 float3 CloudPanoramaDirection(float2 uv)
 {
     float azimuth = (uv.x - 0.5) * 2.0 * PI;
-    float y = uv.y * uv.y * 1.02 - 0.02;
+    float elevation = uv.y * 2.0 - 1.0;
+    float y = sign(elevation) * elevation * elevation;
     float c = sqrt(saturate(1.0 - y * y));
     return float3(sin(azimuth) * c, y, cos(azimuth) * c);
 }
-// rgb premultiplied cloud radiance, a transmittance; identity below the horizon.
+// rgb premultiplied cloud radiance, a transmittance.
 float4 SampleCloudPanorama(float3 worldDir)
 {
     float4 result = float4(0, 0, 0, 1);
-    if (AtmosphereCloudsEnabled() && worldDir.y >= -0.02)
+    if (AtmosphereCloudsEnabled())
         result = SAMPLE_TEXTURE2D_LOD(_CloudPanorama, sampler_CloudPanorama, CloudPanoramaUv(worldDir), 0);
     return result;
 }
@@ -429,24 +431,33 @@ float3 AtmosphereSunDisc(float3 worldDir)
     }
     return result;
 }
-// Distance (metres) along a world direction at which the view ray enters the cloud layer, or -1 when it never does.
+// Segment of the view ray inside the cloud shell, in metres; shared by marching and compositing.
+bool CloudLayerSegment(float3 directionWS, out float tStart, out float tEnd)
+{
+    float3 cameraKm = AtmosphereCameraPlanetKm();
+    float bottomNear, bottomFar, topNear, topFar;
+    bool hitBottom = RaySphereIntersect(cameraKm, directionWS, _AtmosphereRadii.z, bottomNear, bottomFar);
+    bool valid = RaySphereIntersect(cameraKm, directionWS, _AtmosphereRadii.w, topNear, topFar);
+    tStart = max(topNear, 0.0);
+    tEnd = topFar;
+    if (_AtmosphereCamera.w < _AtmosphereRadii.z)
+    {
+        valid = valid && RaySphereIntersectNearest(cameraKm, directionWS, 0, _AtmosphereRadii.x) < 0.0;
+        tStart = max(bottomFar, 0.0);
+    }
+    else if (hitBottom && bottomNear >= 0.0 && directionWS.y < 0.0)
+    {
+        tEnd = min(tEnd, bottomNear);
+    }
+    tStart *= 1000.0;
+    tEnd *= 1000.0;
+    return valid && tEnd > tStart;
+}
+
 float CloudLayerEntryDistance(float3 worldDir)
 {
-    float r = _AtmosphereCamera.w;
-    float3 origin = float3(0, r, 0);
-    float t0, t1;
-    float entry = -1.0;
-    if (r < _AtmosphereRadii.z)
-    {
-        if (RaySphereIntersect(origin, worldDir, _AtmosphereRadii.z, t0, t1)) entry = max(t1, 0.0) * 1000.0;
-    }
-    else if (r <= _AtmosphereRadii.w) entry = 0.0;
-    else
-    {
-        bool hit = RaySphereIntersect(origin, worldDir, _AtmosphereRadii.w, t0, t1);
-        if (hit && t0 >= 0.0) entry = t0 * 1000.0;
-    }
-    return entry;
+    float entry, exit;
+    return CloudLayerSegment(worldDir, entry, exit) ? entry : -1.0;
 }
 // Composites the camera-space cloud buffer over a surface that lies beyond the cloud layer (camera inside or above it).
 float3 AtmosphereApplyCloudsInFront(float3 color, float2 screenUV, float3 positionWS)

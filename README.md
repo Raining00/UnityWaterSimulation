@@ -8,6 +8,8 @@ A Unity URP ocean project with FFT waves, realistic and stylized water, atmosphe
 - **Night:** Stars, the Milky Way, a textured moon, moonlight on the sea, and bioluminescent foam.
 - **Interaction:** Floating rigid bodies, boat buoyancy, powered navigation, and surface wakes.
 
+Cloud tuning and high-altitude viewing notes: [天空与体积云](docs/AtmosphereClouds.md).
+
 ## Gallery
 
 Captured in Unity from the current **DeepOceanDemo** scene, including its water, atmosphere, and night settings.

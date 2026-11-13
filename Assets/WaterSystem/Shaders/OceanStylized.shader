@@ -12,7 +12,11 @@ Shader "WaterSystem/OceanStylized"
         [HideInInspector] _OceanNightHorizon ("Night horizon", Color) = (0.055,0.14,0.29,1)
         [HideInInspector][HDR] _OceanNightGlow ("Foam emission color", Color) = (0.04,0.65,1,1)
         [HideInInspector] _DetailNormal ("Detail normal", 2D) = "bump" {}
-        [HideInInspector] _FoamTex ("Whitecaps", 2D) = "white" {}
+        [HideInInspector] _FoamPattern ("Foam pattern (lace, bubbles, relief, clumps)", 2D) = "gray" {}
+        [HideInInspector] _FoamPatternParams ("Foam tile metres, fine lace, bubbles, clumping", Vector) = (8,0.32,0.2,0.9)
+        [HideInInspector] _FoamShadingParams ("Foam coverage, edge softness, relief shading, animation", Vector) = (1.25,0.045,0.5,1)
+        [HideInInspector] _AerationColor ("Aerated water color", Color) = (0.1,0.62,0.68,1)
+        [HideInInspector] _AerationParams ("Aeration strength, share implied by surface foam", Vector) = (0.85,0.6,0,0)
         [HideInInspector] _ShoreNoise ("Intersection noise", 2D) = "gray" {}
         [HideInInspector] _CausticTex ("Caustics", 2D) = "black" {}
         [HideInInspector] _SkyTex ("Fallback cloud sky", 2D) = "black" {}
@@ -47,7 +51,7 @@ Shader "WaterSystem/OceanStylized"
             TEXTURE2D_ARRAY(_OceanDisplacement); SAMPLER(sampler_OceanDisplacement);
             TEXTURE2D_ARRAY(_OceanNormals); SAMPLER(sampler_OceanNormals);
             TEXTURE2D_ARRAY(_OceanFoam); SAMPLER(sampler_OceanFoam);
-            TEXTURE2D(_FoamTex); SAMPLER(sampler_FoamTex);
+            TEXTURE2D(_FoamPattern); SAMPLER(sampler_FoamPattern);
             TEXTURE2D(_CausticTex); SAMPLER(sampler_CausticTex);
             TEXTURE2D(_DetailNormal); SAMPLER(sampler_DetailNormal);
             TEXTURE2D(_ShoreNoise); SAMPLER(sampler_ShoreNoise);
@@ -55,7 +59,8 @@ Shader "WaterSystem/OceanStylized"
             // Per-ocean values are supplied by MaterialPropertyBlock, not shared global shader state.
             int _OceanSimulationReady, _FFTCascadeCount, _FFTResolution;
             float4 _OceanDomainSizes, _OceanOrigin;
-            // x: ripple damping in churned water (physical shading only), yz: camera distances between
+            float4 _OceanFoamCrest;
+            // x: ripple damping in churned water, yz: camera distances between
             // which ship waves stop displacing vertices.
             float4 _OceanWakeSurface;
             float _OceanSimulationTime;
@@ -64,13 +69,16 @@ Shader "WaterSystem/OceanStylized"
             CBUFFER_START(UnityPerMaterial)
                 float4 _DeepColor, _ShallowColor, _TurquoiseColor, _HorizonColor, _SkyHorizon, _SkyZenith, _FoamColor;
                 float4 _WaterDepth, _NormalSpeed, _ShoreFoam;
+                float4 _FoamPatternParams, _FoamShadingParams, _FoamPattern_TexelSize;
+                float4 _AerationColor, _AerationParams;
                 float _HorizonBlendDistance, _NormalStrength, _DetailNormalStrength, _NormalScale, _DetailFadeDistance;
                 float _ReflectionStrength, _FresnelPower, _SunHighlight, _Roughness, _RefractionStrength, _SkyTextureStrength;
-                float _FoamScale, _FoamStrength, _CausticScale, _CausticStrength, _CausticDepth, _UseSceneTextures;
+                float _CausticScale, _CausticStrength, _CausticDepth, _UseSceneTextures;
                 OCEAN_NIGHT_MATERIAL_FIELDS
             CBUFFER_END
             #define OCEAN_NIGHT_FUNCTIONS 1
             #include "OceanNightCommon.hlsl"
+            #include "OceanFoamCommon.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float2 horizon : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
             float WaveWeight(float2 baseXZ)
@@ -203,6 +211,7 @@ Shader "WaterSystem/OceanStylized"
                 }
                 float2 slope = 0;
                 float foam = 0;
+                float fold = 0;
                 float waveWeight=WaveWeight(baseXZ);
                 // Evaluate derivatives before any varying branch; every filtered lookup below reuses them.
                 float2 baseDx=ddx(baseXZ),baseDy=ddy(baseXZ);
@@ -219,15 +228,23 @@ Shader "WaterSystem/OceanStylized"
                         // Suppress subpixel normal sparkle with the actual UV footprint, independent of patch LOD.
                         float2 footprint = baseFootprint / _OceanDomainSizes[i];
                         float detail = 1 / (1+max(footprint.x,footprint.y)*_FFTResolution);
+                        detail *= 1-wake.aeration*_OceanWakeSurface.x*saturate(1.5-_OceanDomainSizes[i]/40);
                         slope += -sampleNormal.xz / max(sampleNormal.y,0.15) * detail;
-                        float f = OceanNightSampleFoam(uv,i,night);
-                        foam = 1-(1-foam)*(1-f);
+                        float2 f = OceanSampleFoam(uv,i,night,baseDx/_OceanDomainSizes[i],baseDy/_OceanDomainSizes[i]);
+                        foam = 1-(1-foam)*(1-f.x);
+                        fold += f.y-1;
                     }
+                    // All cascades compress the same surface; retain the combined breaking crest.
+                    float crest = saturate((_OceanFoamCrest.x-1-fold)*_OceanFoamCrest.y);
+                    foam = 1-(1-foam)*(1-crest);
                 }
                 slope += wake.gradient;
+                // World-space vessel foam is visible during the day as well as at night.
+                foam = 1-(1-foam)*(1-saturate(wake.foam));
                 slope*=waveWeight;foam*=waveWeight;
                 float t = _OceanSimulationTime;
                 float detailFade = (1-smoothstep(_DetailFadeDistance*0.25,_DetailFadeDistance,distanceToCamera))*waveWeight;
+                detailFade *= 1-saturate(wake.aeration)*_OceanWakeSurface.x;
                 float2 normalUV = baseXZ*_NormalScale;
                 float3 detailA = UnpackNormal(SAMPLE_TEXTURE2D(_DetailNormal,sampler_DetailNormal,normalUV+t*_NormalSpeed.xy));
                 float3 detailB = UnpackNormal(SAMPLE_TEXTURE2D(_DetailNormal,sampler_DetailNormal,normalUV*0.73-t*_NormalSpeed.yx*0.8));
@@ -279,12 +296,31 @@ Shader "WaterSystem/OceanStylized"
                         }
                     }
                 }
+                float shoreFoam = 0;
+                if(hasBottom && _ShoreFoam.x>0)
+                {
+                    float2 uv = baseXZ*_ShoreFoam.z;
+                    float noiseA = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv+t*float2(0.021,0.013)).r;
+                    float noiseB = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv*1.5-t*float2(0.017,0.011)).r;
+                    float noise = (noiseA+noiseB)*0.5;
+                    float shore = saturate(1-intersectionDepth/_ShoreFoam.y);
+                    float edge = 1-smoothstep(0.02,0.22+noise*0.15,intersectionDepth);
+                    float phase = intersectionDepth*7-t*_ShoreFoam.w*6+noise*2;
+                    float band = smoothstep(0.55,0.95,sin(phase));
+                    shoreFoam = saturate((edge*0.7+band*shore*shore)*smoothstep(0.16,0.72,noise)*_ShoreFoam.x);
+                }
+                float aeration = saturate(wake.aeration*waveWeight+foam*_AerationParams.y)*_AerationParams.x;
+                foam = saturate(foam*_FoamShadingParams.x);
+                foam = 1-(1-foam)*(1-shoreFoam);
                 // Independent vertical and view-path extinction keeps shallows transparent from above
                 // while long grazing rays acquire the saturated color of the reference ocean.
                 float3 waterColor = lerp(_ShallowColor.rgb,_TurquoiseColor.rgb,saturate(verticalDepth/_WaterDepth.x));
                 waterColor = lerp(waterColor,_DeepColor.rgb,smoothstep(_WaterDepth.x,_WaterDepth.y,verticalDepth));
                 waterColor = lerp(waterColor, OceanNightPalette(smoothstep(_WaterDepth.x,_WaterDepth.y,verticalDepth)), night);
+                // Subsurface bubbles leave a pale turquoise lane even after the white sheet has thinned.
+                waterColor = lerp(waterColor,lerp(_AerationColor.rgb,_OceanNightShallow.rgb,night),aeration);
                 float density = hasBottom ? saturate(1-exp(-verticalDepth*_WaterDepth.z-thickness*_WaterDepth.w)) : 1;
+                density = lerp(density,1,aeration*0.9);
                 if(hasBottom && _CausticStrength>0)
                 {
                     float2 cuv = bottomWS.xz*_CausticScale;
@@ -314,39 +350,25 @@ Shader "WaterSystem/OceanStylized"
                 float horizonBlend = 1-exp(-distanceToCamera/_HorizonBlendDistance);
                 color = lerp(color,lerp(_HorizonColor.rgb,_OceanNightHorizon.rgb,night),horizonBlend*0.8);
 
-                // The wave foam is sourced from FFT compression; the depth-based shore
-                // decoration is combined separately below.
-                // Night fluorescence also follows the world-space trail left by moving vessels.
-                // Keep the legacy daytime foam unchanged when night is zero.
-                foam = 1.0-(1.0-foam)*(1.0-saturate(wake.foam)*waveWeight*night);
-                float2 foamUV = baseXZ*_FoamScale;
-                float f1 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV+t*float2(0.008,0.004),0).r;
-                float f2 = SAMPLE_TEXTURE2D_LOD(_FoamTex,sampler_FoamTex,foamUV*0.63-t*float2(0.003,0.006),0).r;
-                foam = saturate(foam*_FoamStrength)*smoothstep(0.15,0.8,(f1+f2)*0.5);
-                // Fade unresolved no-mip FFT foam before it becomes subpixel noise.
-                foam *= 1/(1+max(baseFootprint.x,baseFootprint.y)*_FoamScale);
-                float shoreFoam = 0;
-                if(hasBottom && _ShoreFoam.x>0)
+                if(foam>0.0005 || aeration>0.02)
                 {
-                    float2 uv = baseXZ*_ShoreFoam.z;
-                    float noiseA = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv+t*float2(0.021,0.013)).r;
-                    float noiseB = SAMPLE_TEXTURE2D(_ShoreNoise,sampler_ShoreNoise,uv*1.5-t*float2(0.017,0.011)).r;
-                    float noise = (noiseA+noiseB)*0.5;
-                    float shore = saturate(1-intersectionDepth/_ShoreFoam.y);
-                    float edge = 1-smoothstep(0.02,0.22+noise*0.15,intersectionDepth);
-                    float phase = intersectionDepth*7-t*_ShoreFoam.w*6+noise*2;
-                    float band = smoothstep(0.55,0.95,sin(phase));
-                    shoreFoam = saturate((edge*0.7+band*shore*shore)*smoothstep(0.16,0.72,noise)*_ShoreFoam.x);
+                    OceanFoam surface = EvaluateOceanFoam(foam,aeration,baseXZ,baseDx,baseDy,t,
+                        normalize(lerp(sun.direction.xz,moonDirection.xz,night)+float2(1e-4,0)));
+                    float3 foamNormal = normalize(n+float3(0,1,0));
+                    float3 foamLighting = 0.45+sun.color*(0.4*saturate((dot(foamNormal,sun.direction)+0.35)/1.35)*sunlight);
+                    float3 nightFoamLighting = max(SampleSH(n),0.0) + _OceanNightTransition.z * 0.2
+                        + moonLight * saturate(dot(foamNormal,moonDirection));
+                    foamLighting = lerp(foamLighting,nightFoamLighting,night);
+                    float3 foamAlbedo = lerp(lerp(_AerationColor.rgb,_FoamColor.rgb,0.55),_FoamColor.rgb,surface.thickness);
+                    foamAlbedo *= lerp(float3(0.45,0.66,0.90),1,min(surface.shade,1))*max(surface.shade,1);
+                    color = lerp(color,foamAlbedo*foamLighting,surface.alpha);
+                    // Use the eroded lace itself for fluorescence, including shores and vessel wakes.
+                    color += OceanNightFoamEmission(surface.alpha,surface.pattern,baseFootprint,
+                        1/max(_FoamPatternParams.x,0.01),night);
                 }
-                foam = 1-(1-foam)*(1-shoreFoam);
-                float3 foamLighting = 0.6+sun.color*0.4*sunlight;
-                float3 nightFoamLighting = max(SampleSH(n),0.0) + _OceanNightTransition.z * 0.2
-                    + moonLight * saturate(dot(n,moonDirection));
-                color = lerp(color,_FoamColor.rgb*lerp(foamLighting,nightFoamLighting,night),foam);
-                // Emission follows the finished FFT/shore/wake coverage and survives unlit nights.
-                color += OceanNightFoamEmission(foam,(f1+f2)*0.5,baseFootprint,_FoamScale,night);
                 FragmentOutput output;
                 output.color=half4(MixFog(color,fog),1);
+                output.color.rgb = AtmosphereApplyCloudsInFront(output.color.rgb, screenUV, positionWS);
                 // Vertex depth clamp keeps triangles crossing the far plane alive. Recompute fragment
                 // depth from the true interpolated world position so those triangles still occlude
                 // nearby opaque objects correctly, instead of interpolating the clamped corner depths.

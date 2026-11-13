@@ -13,7 +13,7 @@ RWTexture2D<float4> _MultiScatterOutput;
 RWTexture2D<float4> _SkyViewOutput;
 RWTexture3D<float4> _AerialOutput;
 RWTexture2DArray<float4> _SkyCubemapOutput;
-RWStructuredBuffer<float4> _AmbientOutput; // 0 sky, 1 equator, 2 ground, 3 sun transmittance at the camera
+RWStructuredBuffer<float4> _AmbientOutput; // 0 sky, 1 equator, 2 ground, 3 sun transmittance, 4 clear sky, 5 clear ground
 float4x4 _AtmosphereInverseViewProjection;  // camera (OpenGL clip convention), used for aerial perspective froxels
 float _SkyCubemapSize;
 
@@ -155,6 +155,7 @@ void SkyCubemap(uint3 id : SV_DispatchThreadID)
 
 groupshared float4 gSky[64];
 groupshared float4 gEquator[64];
+groupshared float3 gClearSky[64];
 
 // Hemisphere integrals of the final sky (with clouds) for tri-light ambient, plus the sun transmittance.
 [numthreads(64,1,1)]
@@ -163,6 +164,7 @@ void AmbientProbe(uint3 id : SV_DispatchThreadID)
     const uint directionCount = 1024;
     const float solidAngle = 4.0 * PI / directionCount;
     float4 sky = 0, equator = 0;
+    float3 clearSky = 0;
     for (uint k = 0; k < directionCount / 64; k++)
     {
         uint i = id.x * (directionCount / 64) + k;
@@ -171,6 +173,7 @@ void AmbientProbe(uint3 id : SV_DispatchThreadID)
         float phi = i * 2.39996323;
         float3 direction = float3(r * cos(phi), y, r * sin(phi));
         float3 L = AtmosphereSkyRadiance(direction) + NightSkyRadiance(direction, 0.04, false);
+        if (y > 0.0) clearSky += L * y * solidAngle;
         float4 clouds = SampleCloudPanorama(direction);
         L = L * clouds.a + clouds.rgb;
         if (y > 0.0) sky += float4(L * y * solidAngle, 0);
@@ -178,6 +181,7 @@ void AmbientProbe(uint3 id : SV_DispatchThreadID)
     }
     gSky[id.x] = sky;
     gEquator[id.x] = equator;
+    gClearSky[id.x] = clearSky;
     GroupMemoryBarrierWithGroupSync();
     for (uint stride = 32; stride > 0; stride >>= 1)
     {
@@ -185,6 +189,7 @@ void AmbientProbe(uint3 id : SV_DispatchThreadID)
         {
             gSky[id.x] += gSky[id.x + stride];
             gEquator[id.x] += gEquator[id.x + stride];
+            gClearSky[id.x] += gClearSky[id.x + stride];
         }
         GroupMemoryBarrierWithGroupSync();
     }
@@ -198,4 +203,6 @@ void AmbientProbe(uint3 id : SV_DispatchThreadID)
     _AmbientOutput[1] = float4(0.5 * (horizonRadiance + ground), 1);
     _AmbientOutput[2] = float4(ground, 1);
     _AmbientOutput[3] = float4(sunTransmittance, 1);
+    _AmbientOutput[4] = float4(gClearSky[0] / PI, 1);
+    _AmbientOutput[5] = float4(_AtmosphereGround.xyz * (gClearSky[0] + _AtmosphereSunIlluminance.xyz * sunTransmittance * saturate(_AtmosphereSun.y)) / PI, 1);
 }

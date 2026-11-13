@@ -419,6 +419,7 @@ Shader "WaterSystem/Ocean"
                     color = lerp(color,_DeepColor.rgb,1-exp(-distanceToCamera*0.04));
                 FragmentOutput output;
                 output.color=half4(faceSign<0 && _UnderwaterEnabled>0.5 ? color : MixFog(color,fog),1);
+                output.color.rgb = AtmosphereApplyCloudsInFront(output.color.rgb, screenUV, positionWS);
                 // Vertex depth clamp keeps triangles crossing the far plane alive. Recompute fragment
                 // depth from the true interpolated world position so those triangles still occlude
                 // nearby opaque objects correctly, instead of interpolating the clamped corner depths.

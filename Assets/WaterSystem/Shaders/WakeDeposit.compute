@@ -2,6 +2,8 @@
 //
 // BuildWakeWaves  bends the precomputed Kelvin wave pattern along each ship's trail. Nothing is
 //                 simulated: the pattern of a hull at constant speed is stationary in its own frame.
+//                 Every stretch of a trail carries the wavelength it was made with and its own
+//                 place in the pattern, so a wake keeps its shape when the hull slows down or stops.
 // UpdateWakeFoam  carries the foam and aeration history forward and adds this frame's deposits.
 //
 // A window texel is an UNDISPLACED ocean coordinate, the same one the surface shader looks up. Both
@@ -15,10 +17,12 @@ struct WakeNode
 {
     float2 position;   // World XZ of a trail sample; the first node of a ship is its wave origin now.
     float2 backward;   // Unit direction along the trail towards older samples.
-    float distance;    // Metres behind the wave origin, measured along the trail.
+    float phase;       // Place in the pattern: wavenumber times the distance behind the wave origin.
     float amplitude;   // Wave height in metres for a pattern value of one.
     float breaking;    // Foam left by the crests of this part of the wake.
-    float padding;
+    float wavenumber;  // g / U^2 of the hull speed U this stretch was made at, in 1/m.
+    float curvature;   // Turn of `backward` per metre of trail: a wedge is narrower by lateral * curvature than at the trail.
+    float3 padding;
 };
 
 struct WakeShip
@@ -26,12 +30,9 @@ struct WakeShip
     float2 boundsCenter;
     float boundsRadius;
     float hullLength;
-    float slice;       // Fractional Froude slice of the Kelvin atlas.
-    float scaleLow;    // (slice Froude / ship Froude)^2 for the lower and the upper slice: both are
-    float scaleHigh;   // read at the same k0-scaled position, so their crests line up while blending.
     float nodeStart;
     float nodeCount;
-    float3 padding;
+    float2 padding;
 };
 
 struct WakeSplat
@@ -52,6 +53,7 @@ int _WakeShipCount, _WakeSplatCount;
 Texture2D<float4> _KelvinAtlas;
 SamplerState sampler_LinearClamp;
 float4 _KelvinLayout;   // x: length behind the hull, y: half width (both in hull lengths), z: slices, w: rows per slice
+float4 _KelvinFroude[2];   // Froude number of every slice, lowest first
 
 Texture2DArray<float4> _OceanDisplacement;
 SamplerState sampler_OceanDisplacement;
@@ -90,13 +92,25 @@ float3 SampleKelvinSlice(float slice, float2 position)
     return _KelvinAtlas.SampleLevel(sampler_LinearClamp, uv, 0).rgb * fade;
 }
 
-float3 SampleKelvin(WakeShip ship, float2 position)
+float SliceFroude(int slice) { return _KelvinFroude[slice >> 2][slice & 3]; }
+
+// coordinate: (phase behind the wave origin, distance from the trail times the wavenumber). In these
+// units the crests of every slice lie in the same place, so two slices blend without ghosting and a
+// trail may change its wavenumber along the way. Returns the normalised height and its derivatives
+// along both coordinates.
+float3 SampleKelvin(float froude, float2 coordinate)
 {
-    float lower = floor(ship.slice);
-    float upper = min(lower + 1.0, _KelvinLayout.z - 1.0);
-    float3 a = SampleKelvinSlice(lower, position * ship.scaleLow) * float3(1, ship.scaleLow, ship.scaleLow);
-    float3 b = SampleKelvinSlice(upper, position * ship.scaleHigh) * float3(1, ship.scaleHigh, ship.scaleHigh);
-    return lerp(a, b, ship.slice - lower);
+    int last = (int)_KelvinLayout.z - 1, lower = 0;
+    [loop] for (int i = 1; i < last; i++)
+        if (froude >= SliceFroude(i)) lower = i;
+    float2 scale = float2(SliceFroude(lower), SliceFroude(lower + 1));
+    // Slices are spaced geometrically, so blend in the logarithm; outside the table the nearest
+    // slice is kept and only its scale changes.
+    float weight = saturate(log(froude / scale.x) / log(scale.y / scale.x));
+    scale *= scale;
+    float3 a = SampleKelvinSlice(lower, coordinate * scale.x) * float3(1, scale.x, scale.x);
+    float3 b = SampleKelvinSlice(lower + 1, coordinate * scale.y) * float3(1, scale.y, scale.y);
+    return lerp(a, b, weight);
 }
 
 [numthreads(8, 8, 1)]
@@ -131,10 +145,17 @@ void BuildWakeWaves(uint3 id : SV_DispatchThreadID)
                     back /= max(length(back), 1e-4);
                     float2 side = float2(-back.y, back.x);
                     float lateral = dot(world - lerp(newer.position, older.position, t), side);
-                    float2 position = float2(lerp(newer.distance, older.distance, t), abs(lateral)) / ship.hullLength;
-                    float3 pattern = SampleKelvin(ship, position);
+                    // On the inside of a turn the lines across the trail converge and squeeze the
+                    // pattern between them: at the centre of the turn the wedge has no width left.
+                    // Crests bunched up to less than half their spacing are ripples the wake never
+                    // had, so the waves fade out before they get there.
+                    amplitude *= smoothstep(0.25, 0.5, 1.0 - lateral * lerp(newer.curvature, older.curvature, t));
+                    float wavenumber = max(lerp(newer.wavenumber, older.wavenumber, t), 1e-5);
+                    float2 coordinate = float2(lerp(newer.phase, older.phase, t), abs(lateral) * wavenumber);
+                    // The Froude number of the hull at the speed these waves were made with picks the slices.
+                    float3 pattern = SampleKelvin(rsqrt(wavenumber * ship.hullLength), coordinate);
                     height += pattern.x * amplitude;
-                    gradient += (pattern.y * back + pattern.z * (lateral < 0 ? -side : side)) * (amplitude / ship.hullLength);
+                    gradient += (pattern.y * back + pattern.z * (lateral < 0 ? -side : side)) * (amplitude * wavenumber);
                     crest += lerp(newer.breaking, older.breaking, t) * saturate(pattern.x * 2.5 - 1.0);
                 }
             }

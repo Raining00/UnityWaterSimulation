@@ -62,7 +62,7 @@ namespace WaterSystem.Ocean
         [Min(0)] public float foamDecay = 0.5f;
         [Min(0)] public float foamBuildRate = 3;
 
-        [Header("Breaking crests (combined fold of all cascades, physical shading)")]
+        [Header("Breaking crests (combined fold of all cascades)")]
         [Tooltip("Foam appears where the Jacobian of all cascades together drops below this value. Raise it for more whitecaps.")]
         [Range(-1, 1.5f)] public float crestFoamThreshold = 0.5f;
         [Tooltip("Jacobian range over which crest foam grows from sparse lace to solid white.")]
